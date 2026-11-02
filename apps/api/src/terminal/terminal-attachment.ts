@@ -46,6 +46,9 @@ export class TerminalAttachment {
   private inputWindowStart = 0;
   private inputWindowChars = 0;
 
+  private cols: number;
+  private rows: number;
+
   private inScrollback = false;
   /** Input held back while tmux leaves copy mode. Non-null only during that transition. */
   private heldInput: string[] | null = null;
@@ -54,6 +57,8 @@ export class TerminalAttachment {
     private readonly ws: WebSocket,
     private readonly options: AttachmentOptions,
   ) {
+    this.cols = options.cols;
+    this.rows = options.rows;
     ws.on('message', this.handleMessage);
     ws.on('close', this.handleSocketClose);
     ws.on('error', this.handleSocketError);
@@ -148,6 +153,8 @@ export class TerminalAttachment {
         this.handleInput(message.data);
         break;
       case 'resize':
+        this.cols = message.cols;
+        this.rows = message.rows;
         this.pty.resize(message.cols, message.rows);
         break;
       case 'scroll':
@@ -196,14 +203,20 @@ export class TerminalAttachment {
     if (lines < 0) this.inScrollback = true;
     try {
       const result = await this.options.tmux.scrollPane(this.options.session, lines);
-      if (result === 'application') {
-        this.inScrollback = false;
-        this.pty?.write((lines < 0 ? '\x1b[A' : '\x1b[B').repeat(Math.abs(lines)));
-      }
+      if (result === 'scrolled') return;
+      this.inScrollback = false;
+      const key = result === 'mouse' ? this.wheelSequence(lines) : lines < 0 ? '\x1b[A' : '\x1b[B';
+      this.pty?.write(key.repeat(Math.abs(lines)));
     } catch (error) {
       // The session may have ended between the wheel event and this call.
       this.logger.debug(`Scroll failed: ${(error as Error).message}`);
     }
+  }
+
+  /** An SGR wheel event at the center of the terminal. tmux delivers it to the application. */
+  private wheelSequence(lines: number): string {
+    const button = lines < 0 ? 64 : 65;
+    return `\x1b[<${button};${Math.ceil(this.cols / 2)};${Math.ceil(this.rows / 2)}M`;
   }
 
   private async handlePtyExit(): Promise<void> {

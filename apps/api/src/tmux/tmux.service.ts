@@ -14,7 +14,12 @@ export interface TmuxSession {
   windows: number;
 }
 
-export type ScrollResult = 'scrolled' | 'application';
+/**
+ * - `scrolled`: tmux moved through its own history.
+ * - `mouse`: the application tracks the mouse, so the caller must forward wheel events.
+ * - `keys`: a full-screen application without mouse tracking, so the caller must send arrow keys.
+ */
+export type ScrollResult = 'scrolled' | 'mouse' | 'keys';
 
 /**
  * Session names go last and numbers first: tmux forbids `:` in a name, so everything after the
@@ -144,8 +149,8 @@ export class TmuxService implements OnModuleInit {
 
   /**
    * tmux keeps the browser terminal on its alternate screen, so xterm.js collects no scrollback of
-   * its own. History lives in tmux, and this drives its copy mode. When the pane is running a
-   * full-screen application, the caller should forward arrow keys instead.
+   * its own. History normally lives in tmux, and this drives its copy mode. Full-screen applications
+   * have no tmux history, so they handle scrolling themselves. See ScrollResult.
    */
   async scrollPane(name: string, lines: number): Promise<ScrollResult> {
     const pane = exactPane(name);
@@ -157,7 +162,12 @@ export class TmuxService implements OnModuleInit {
       '#{pane_in_mode}:#{alternate_on}:#{mouse_any_flag}',
     ]);
     const [inMode, alternate, mouse] = state.trim().split(':');
-    if (inMode !== '1' && (alternate === '1' || mouse === '1')) return 'application';
+    if (inMode !== '1') {
+      // Mouse first: arrow keys mean something else to these applications. In Claude Code they
+      // recall previous prompts, while wheel events scroll its transcript.
+      if (mouse === '1') return 'mouse';
+      if (alternate === '1') return 'keys';
+    }
 
     const count = String(Math.abs(lines));
     if (lines < 0) {

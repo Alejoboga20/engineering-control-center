@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import request from 'supertest';
@@ -160,6 +160,37 @@ describeWithTmux('real tmux', () => {
     await waitUntil(() => size().startsWith('80x'));
     client.send({ type: 'resize', cols: 133, rows: 41 });
     await waitUntil(() => size().startsWith('133x'));
+    client.ws.close();
+    await client.closed;
+  }, 15000);
+
+  it('delivers the wheel to a full-screen application that tracks the mouse, as Claude Code does', async () => {
+    const log = join(root, 'wheel-input.log');
+    const app = join(root, 'mouse-app.cjs');
+    writeFileSync(
+      app,
+      `const fs = require('fs');
+       process.stdin.setRawMode(true);
+       process.stdout.write('\\x1b[?1049h\\x1b[?1003h\\x1b[?1006h');
+       process.stdin.on('data', (data) => fs.appendFileSync(${JSON.stringify(log)}, data));
+       setInterval(() => {}, 1000);`,
+    );
+    tmux('new-session', '-d', '-s', 'mouseapp', '-x', '80', '-y', '24');
+    tmux('send-keys', '-t', '=mouseapp:', `exec ${JSON.stringify(process.execPath)} ${app}`, 'Enter');
+    const flags = () => tmux('display-message', '-p', '-t', '=mouseapp:', '#{alternate_on}:#{mouse_any_flag}');
+    await waitUntil(() => flags() === '1:1');
+
+    const client = connect(running.port, '/api/sessions/mouseapp/terminal?cols=80&rows=24');
+    await client.waitFor(() => client.messages.some((m) => m.type === 'ready'));
+    client.send({ type: 'scroll', lines: -1 });
+    client.send({ type: 'scroll', lines: 1 });
+
+    const received = () => (existsSync(log) ? readFileSync(log, 'utf8') : '');
+    await waitUntil(() => received().includes('\x1b[<65;'));
+    expect(received()).toContain('\x1b[<64;');
+    expect(received()).not.toContain('\x1b[A');
+    expect(received()).not.toContain('\x1b[B');
+    expect(tmux('display-message', '-p', '-t', '=mouseapp:', '#{pane_in_mode}')).toBe('0');
     client.ws.close();
     await client.closed;
   }, 15000);
