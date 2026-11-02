@@ -37,6 +37,7 @@ To test against a remote host, first run `ssh -N -L 3000:127.0.0.1:3000 you@host
 | Resize the browser window, and run `stty size`. | The dimensions follow the window. |
 | Scroll with the wheel after `seq 1 500`. Then type a key. | History scrolls, with a position indicator in the corner. Typing returns to the prompt. |
 | Run `vim` or `htop`, and `printf '\e[38;2;255;100;0mtruecolor\e[0m\n'`. | Full-screen programs and 24-bit color render correctly. |
+| Drag across text, in a shell and in `claude`, then copy and paste it elsewhere. | The terminal text highlights, not the page around it, and the pasted text matches. |
 | Run `claude`, get a long reply, and scroll up with the wheel. | The transcript scrolls. Previous prompts are not recalled into the input box. |
 | Run `claude`. | Claude Code's interface works. Close the browser and reopen it: the conversation is still there. |
 

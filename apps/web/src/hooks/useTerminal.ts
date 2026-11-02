@@ -2,6 +2,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { TERMINAL_LIMITS, TerminalCloseCode } from '@ecc/shared';
+import { attachClipboard } from '../services/terminal-clipboard';
 import {
   chunkInput,
   parseServerMessage,
@@ -53,20 +54,6 @@ const THEME = {
   brightWhite: '#f0f6fc',
 };
 
-/** Ctrl+Shift+C and Ctrl+Shift+V, since plain Ctrl+C belongs to the application in the terminal. */
-function attachClipboardKeys(term: Terminal): void {
-  term.attachCustomKeyEventHandler((event) => {
-    if (event.type !== 'keydown' || !event.ctrlKey || !event.shiftKey) return true;
-    if (event.code === 'KeyC') {
-      event.preventDefault();
-      if (term.hasSelection()) void navigator.clipboard?.writeText(term.getSelection());
-      return false;
-    }
-    // Returning false leaves the browser to fire the paste event, which xterm.js handles.
-    return event.code !== 'KeyV';
-  });
-}
-
 /**
  * Owns one xterm.js instance and its WebSocket for the lifetime of the selected session.
  * Reconnecting replaces only the socket. tmux redraws the whole screen on attach, so no output
@@ -97,7 +84,7 @@ export function useTerminal(
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(container);
-    attachClipboardKeys(term);
+    attachClipboard(term);
 
     const safeFit = () => {
       if (container.clientWidth > 0 && container.clientHeight > 0) {

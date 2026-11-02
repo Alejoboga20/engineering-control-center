@@ -57,6 +57,21 @@ export class FakeTerminal {
   private resizeListener: ((size: { cols: number; rows: number }) => void) | null = null;
   keyHandler: ((event: KeyboardEvent) => boolean) | null = null;
   wheelHandler: ((event: WheelEvent) => boolean) | null = null;
+  csiHandler: ((params: (number | number[])[]) => boolean) | null = null;
+  oscHandler: ((data: string) => boolean) | null = null;
+  parser = {
+    registerCsiHandler: (
+      _id: { prefix?: string; final: string },
+      handler: (params: (number | number[])[]) => boolean,
+    ) => {
+      this.csiHandler = handler;
+      return { dispose: () => {} };
+    },
+    registerOscHandler: (_code: number, handler: (data: string) => boolean) => {
+      this.oscHandler = handler;
+      return { dispose: () => {} };
+    },
+  };
   loadAddon = vi.fn();
   open = vi.fn();
   focus = vi.fn();
