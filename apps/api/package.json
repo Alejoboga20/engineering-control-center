@@ -1,0 +1,38 @@
+{
+  "name": "@ecc/api",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "postinstall": "node ../../scripts/fix-node-pty-permissions.cjs",
+    "dev": "nest start --watch",
+    "build": "nest build",
+    "start": "NODE_ENV=production node dist/main.js",
+    "test": "jest",
+    "typecheck": "tsc -p tsconfig.spec.json --noEmit"
+  },
+  "dependencies": {
+    "@ecc/shared": "workspace:*",
+    "@nestjs/common": "^11.1.0",
+    "@nestjs/core": "^11.1.0",
+    "@nestjs/platform-express": "^11.1.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.2",
+    "node-pty": "1.1.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.24",
+    "@nestjs/testing": "^11.1.0",
+    "@types/express": "^5.0.3",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.18.0",
+    "@types/supertest": "^6.0.3",
+    "@types/ws": "^8.18.1",
+    "jest": "^29.7.0",
+    "supertest": "^7.1.4",
+    "ts-jest": "^29.4.0",
+    "typescript": "~5.9.3"
+  }
+}

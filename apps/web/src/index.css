@@ -1,0 +1,30 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-surface: #0d1117;
+  --color-raised: #161b22;
+  --color-overlay: #1f2630;
+  --color-line: #2a313c;
+  --color-ink: #e6edf3;
+  --color-muted: #8b95a3;
+  --color-accent: #58a6ff;
+  --font-mono: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-size: 14px;
+}
+
+/* The terminal paints its own padding, so that FitAddon measures the space it really has. */
+.xterm {
+  height: 100%;
+  padding: 8px 0 0 10px;
+}
