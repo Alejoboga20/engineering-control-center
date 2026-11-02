@@ -26,7 +26,7 @@ Text frames contain JSON.
 | --- | --- | --- |
 | `{"type":"input","data":string}` | 64 KiB (UTF-16 code units) per message, 4 MiB per second | Written to the PTY. Split larger pastes into several messages. |
 | `{"type":"resize","cols":int,"rows":int}` | cols 2-1000, rows 2-500 | Resizes the PTY. |
-| `{"type":"scroll","lines":int}` | -100 to 100, not 0 | Scrolls tmux history. Negative is up. |
+| `{"type":"scroll","lines":int}` | -100 to 100, not 0 | Scrolls tmux history, or passes the wheel to a full-screen application in the pane. Negative is up. |
 
 An invalid message gets a `PROTOCOL_ERROR` reply and is otherwise ignored. A frame above the size
 limit closes the connection with code 1009. Input sent before `ready` is discarded.

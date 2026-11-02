@@ -46,8 +46,10 @@ describe('terminal WebSocket', () => {
   let spawnArgs: string[][];
   let tmuxCommands: string[][];
   let existingSessions: Set<string>;
+  let paneState: string;
 
   beforeEach(async () => {
+    paneState = '0:0:0\n';
     ptys = [];
     spawnArgs = [];
     tmuxCommands = [];
@@ -63,7 +65,7 @@ describe('terminal WebSocket', () => {
             throw new TmuxCommandError(args, `can't find session: ${args[2]}`, 1);
           }
         }
-        if (args[0] === 'display-message') return '0:0:0\n';
+        if (args[0] === 'display-message') return paneState;
         return '';
       }),
     };
@@ -267,6 +269,28 @@ describe('terminal WebSocket', () => {
     const issued = tmuxCommands.map((args) => args[0]);
     expect(issued.indexOf('send-keys')).toBeGreaterThan(issued.indexOf('copy-mode'));
     expect(tmuxCommands.at(-1)).toEqual(['send-keys', '-X', '-t', '=alpha:', 'cancel']);
+    client.ws.close();
+  });
+
+  it('sends wheel events, not arrow keys, to an application tracking the mouse', async () => {
+    paneState = '0:1:1\n';
+    const client = await open('alpha', '?cols=100&rows=30');
+    client.send({ type: 'resize', cols: 120, rows: 40 });
+    client.send({ type: 'scroll', lines: -2 });
+    client.send({ type: 'scroll', lines: 1 });
+    await waitUntil(() => ptys[0].written.length === 2);
+
+    expect(ptys[0].written).toEqual(['\x1b[<64;60;20M\x1b[<64;60;20M', '\x1b[<65;60;20M']);
+    expect(tmuxCommands.map((args) => args[0])).not.toContain('copy-mode');
+    client.ws.close();
+  });
+
+  it('sends arrow keys to a full-screen application without mouse tracking', async () => {
+    paneState = '0:1:0\n';
+    const client = await open();
+    client.send({ type: 'scroll', lines: -2 });
+    await waitUntil(() => ptys[0].written.length === 1);
+    expect(ptys[0].written).toEqual(['\x1b[A\x1b[A']);
     client.ws.close();
   });
 

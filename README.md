@@ -211,7 +211,8 @@ Terminal output passes through memory only. It is never written to disk by the d
 
 ## Using the terminal
 
-- **Scrolling:** the mouse wheel scrolls tmux history. tmux keeps only 2000 lines per pane by default, so
+- **Scrolling:** in a shell, the mouse wheel scrolls tmux history. Full-screen programs that track the mouse,
+  like Claude Code, receive it as wheel events and scroll themselves. tmux keeps only 2000 lines per pane by default, so
   consider adding `set -g history-limit 50000` to `~/.tmux.conf`. Typing returns to the live view.
 - **Copy:** select with the mouse, then Ctrl+Shift+C (Cmd+C on a Mac).
 - **Paste:** Ctrl+Shift+V (Cmd+V on a Mac).

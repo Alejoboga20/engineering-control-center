@@ -110,11 +110,28 @@ describe('TmuxService', () => {
       expect(run).toHaveBeenCalledTimes(1);
     });
 
-    it('leaves full-screen applications to handle scrolling', async () => {
+    it('asks for arrow keys from a full-screen application without mouse tracking', async () => {
       const { service, run } = setup();
       run.mockResolvedValueOnce('0:1:0\n');
-      await expect(service.scrollPane('alpha', -5)).resolves.toBe('application');
+      await expect(service.scrollPane('alpha', -5)).resolves.toBe('keys');
       expect(run).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(['0:1:1\n', '0:0:1\n'])(
+      'asks for wheel events from an application tracking the mouse (%j)',
+      async (state) => {
+        const { service, run } = setup();
+        run.mockResolvedValueOnce(state);
+        await expect(service.scrollPane('alpha', -5)).resolves.toBe('mouse');
+        expect(run).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it('keeps scrolling copy mode even over a full-screen application', async () => {
+      const { service, run } = setup();
+      run.mockResolvedValueOnce('1:1:1\n');
+      await expect(service.scrollPane('alpha', 5)).resolves.toBe('scrolled');
+      expect(run.mock.calls[1][0]).toContain('scroll-down');
     });
   });
 });
