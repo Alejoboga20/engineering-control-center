@@ -210,6 +210,59 @@ describe('terminal connection', () => {
   });
 });
 
+describe('terminal clipboard', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    installBrowserFakes();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it.each([[[1000]], [[1003]], [[1006]], [[1000, 1006]]])(
+    'ignores the mouse tracking request %j, which would disable text selection',
+    async (params) => {
+      await mount();
+      expect(terminals[0].csiHandler!(params)).toBe(true);
+    },
+  );
+
+  it.each([[[2004]], [[1049]], [[25]], [[1000, 2004]], [[]]])(
+    'leaves other private modes to the terminal: %j',
+    async (params) => {
+      await mount();
+      expect(terminals[0].csiHandler!(params)).toBe(false);
+    },
+  );
+
+  it('copies OSC 52 writes to the clipboard, including UTF-8', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+    await mount();
+    expect(terminals[0].oscHandler!(`c;${btoa('héllo ✓'.replace(/./gu, (c) => String.fromCharCode(...new TextEncoder().encode(c))))}`)).toBe(true);
+    expect(writeText).toHaveBeenCalledWith('héllo ✓');
+  });
+
+  it.each(['c;?', 'c;', 'no-separator', 'c;not valid base64!'])(
+    'refuses the OSC 52 payload %j, so clipboard reads never happen',
+    async (payload) => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      vi.stubGlobal('navigator', { clipboard: { writeText } });
+      await mount();
+      expect(terminals[0].oscHandler!(payload)).toBe(true);
+      expect(writeText).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not fail where the Clipboard API is unavailable', async () => {
+    vi.stubGlobal('navigator', {});
+    await mount();
+    expect(terminals[0].oscHandler!(`c;${btoa('text')}`)).toBe(true);
+  });
+});
+
 describe('chunkInput', () => {
   it('splits large pastes without exceeding the limit or losing data', () => {
     const text = 'x'.repeat(TERMINAL_LIMITS.maxInputChunk * 2 + 5);

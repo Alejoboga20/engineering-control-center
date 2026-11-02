@@ -214,7 +214,11 @@ Terminal output passes through memory only. It is never written to disk by the d
 - **Scrolling:** in a shell, the mouse wheel scrolls tmux history. Full-screen programs that track the mouse,
   like Claude Code, receive it as wheel events and scroll themselves. tmux keeps only 2000 lines per pane by default, so
   consider adding `set -g history-limit 50000` to `~/.tmux.conf`. Typing returns to the live view.
-- **Copy:** select with the mouse, then Ctrl+Shift+C (Cmd+C on a Mac).
+- **Copy:** drag to select, then Ctrl+Shift+C (Cmd+C on a Mac). Selection works in every program, including
+  Claude Code. Copies made by tmux or by programs using OSC 52, such as Claude Code's `/copy`, also reach
+  the browser clipboard, which needs HTTPS or localhost. Programs can write to the clipboard but never read it.
+- **Mouse clicks** are not sent to programs in the terminal, as that would disable text selection. The wheel
+  still works.
 - **Paste:** Ctrl+Shift+V (Cmd+V on a Mac).
 - **Reserved keys:** browsers keep a few shortcuts for themselves, notably Ctrl+W and Ctrl+T. Installing the
   dashboard as a browser app (PWA window) can free some of them.
