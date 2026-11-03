@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { isValidSessionName, SessionDto } from '@ecc/shared';
+import { ClaudeStateService } from '../claude-monitoring/claude-state.service';
 import { ApiError } from '../common/api-error';
 import { TmuxService, TmuxSession } from '../tmux/tmux.service';
 import {
@@ -42,6 +43,7 @@ export class SessionsService {
   constructor(
     private readonly tmux: TmuxService,
     private readonly directories: ProjectDirectoriesService,
+    private readonly claudeState: ClaudeStateService,
   ) {}
 
   async list(): Promise<SessionDto[]> {
@@ -57,6 +59,7 @@ export class SessionsService {
     const directory = await this.directories.resolveWorkingDirectory(workingDirectory);
     try {
       await this.tmux.createSession(name, directory);
+      this.claudeState.forget(name);
       const sessions = await this.tmux.listSessions();
       const created = sessions.find((session) => session.name === name);
       return created
@@ -75,6 +78,7 @@ export class SessionsService {
   async terminate(name: string): Promise<void> {
     try {
       await this.tmux.killSession(name);
+      this.claudeState.forget(name);
     } catch (error) {
       throw toApiError(error);
     }

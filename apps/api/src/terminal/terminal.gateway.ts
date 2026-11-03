@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 import {
+  CLAUDE_EVENTS_PATH,
   isValidSessionName,
   SESSION_NAME_RULES,
   ServerMessage,
@@ -76,6 +77,9 @@ export class TerminalGateway implements OnApplicationBootstrap, BeforeApplicatio
     socket.on('error', () => socket.destroy());
 
     const url = new URL(req.url ?? '/', 'http://localhost');
+    // Handled by ClaudeMonitoringGateway, on its own listener for this event.
+    if (url.pathname === CLAUDE_EVENTS_PATH) return;
+
     const match = TERMINAL_PATH.exec(url.pathname);
     if (!match) {
       this.rejectUpgrade(socket, '404 Not Found');

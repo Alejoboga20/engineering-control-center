@@ -1,9 +1,11 @@
 import type { SessionDto } from '@ecc/shared';
 import { TerminalView } from '../components/TerminalView';
+import type { ClaudeMonitorView } from '../services/claude-status';
 
 interface DashboardPageProps {
   selected: string | null;
   sessions: SessionDto[] | null;
+  monitor: ClaudeMonitorView;
   onCreate: () => void;
   onTerminate: (session: string) => void;
   onSessionEnded: () => void;
@@ -34,6 +36,7 @@ export function DashboardPage(props: DashboardPageProps) {
     <TerminalView
       key={props.selected}
       session={props.selected}
+      monitor={props.monitor}
       onTerminate={props.onTerminate}
       onSessionEnded={props.onSessionEnded}
     />

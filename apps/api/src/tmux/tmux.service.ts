@@ -34,6 +34,9 @@ const DUPLICATE_SESSION = /duplicate session/i;
 
 const MIN_TMUX_VERSION = 3.2;
 
+/** Read by scripts/claude-hook-reporter.cjs and by the hook command it is installed with. */
+export const CLAUDE_SESSION_ENV = 'ECC_TMUX_SESSION';
+
 /** tmux matches `-t name` by prefix and glob. The `=` prefix requires an exact match. */
 function exactSession(name: string): string {
   return `=${name}`;
@@ -107,9 +110,22 @@ export class TmuxService implements OnModuleInit {
     }
   }
 
+  /**
+   * `-e` gives every pane of this session, and so any Claude Code started in it, a variable naming
+   * the session. That is how hook events get attributed. See docs/claude-monitoring.md.
+   */
   async createSession(name: string, workingDirectory: string): Promise<void> {
     try {
-      await this.runner.run(['new-session', '-d', '-s', name, '-c', workingDirectory]);
+      await this.runner.run([
+        'new-session',
+        '-d',
+        '-s',
+        name,
+        '-c',
+        workingDirectory,
+        '-e',
+        `${CLAUDE_SESSION_ENV}=${name}`,
+      ]);
     } catch (error) {
       if (error instanceof TmuxCommandError && DUPLICATE_SESSION.test(error.stderr)) {
         throw new TmuxDuplicateSessionError(name);

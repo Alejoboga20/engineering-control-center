@@ -1,4 +1,7 @@
+import { mkdtempSync, readFileSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test, TestingModuleBuilder } from '@nestjs/testing';
 import { WebSocket } from 'ws';
@@ -17,8 +20,16 @@ export function testConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     allowedHosts: ['localhost:4999'],
     tmuxBin: 'tmux',
     webDistPath: '/nonexistent',
+    // Every test gets its own directory, so that tests never touch real hook credentials.
+    stateDir: mkdtempSync(join(tmpdir(), 'ecc-state-')),
     ...overrides,
   };
+}
+
+/** The token the hook reporter would read. */
+export function hookToken(config: AppConfig): string {
+  return (JSON.parse(readFileSync(join(config.stateDir, 'claude-hook.json'), 'utf8')) as { token: string })
+    .token;
 }
 
 export interface RunningApp {

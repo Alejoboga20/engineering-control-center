@@ -61,6 +61,8 @@ describe('sessions HTTP API', () => {
       'alpha',
       '-c',
       join(root, 'project'),
+      '-e',
+      'ECC_TMUX_SESSION=alpha',
     ]);
   });
 

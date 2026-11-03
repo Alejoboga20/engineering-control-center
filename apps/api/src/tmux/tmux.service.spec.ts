@@ -60,7 +60,16 @@ describe('TmuxService', () => {
     it('creates a detached session, passing values as separate arguments', async () => {
       const { service, run } = setup();
       await service.createSession('alpha', '/srv/my project');
-      expect(run).toHaveBeenCalledWith(['new-session', '-d', '-s', 'alpha', '-c', '/srv/my project']);
+      expect(run).toHaveBeenCalledWith([
+        'new-session',
+        '-d',
+        '-s',
+        'alpha',
+        '-c',
+        '/srv/my project',
+        '-e',
+        'ECC_TMUX_SESSION=alpha',
+      ]);
     });
 
     it('maps a duplicate error', async () => {
