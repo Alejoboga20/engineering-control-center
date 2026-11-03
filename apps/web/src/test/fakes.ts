@@ -72,6 +72,7 @@ export class FakeTerminal {
       return { dispose: () => {} };
     },
   };
+  element = document.createElement('div');
   loadAddon = vi.fn();
   open = vi.fn();
   focus = vi.fn();

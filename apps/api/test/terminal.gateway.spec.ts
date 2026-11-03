@@ -95,7 +95,7 @@ describe('terminal WebSocket', () => {
   it('attaches with an exact target and the requested size, without creating a session', async () => {
     const client = await open('alpha', '?cols=100&rows=30');
     expect(client.messages[0]).toEqual({ type: 'ready', session: 'alpha', cols: 100, rows: 30 });
-    expect(spawnArgs[0]).toEqual(['-u', '-T', 'RGB', 'attach-session', '-t', '=alpha']);
+    expect(spawnArgs[0]).toEqual(['-u', '-T', 'RGB,hyperlinks', 'attach-session', '-t', '=alpha']);
     expect(tmuxCommands.map((args) => args[0])).toEqual(['has-session']);
     client.ws.close();
   });

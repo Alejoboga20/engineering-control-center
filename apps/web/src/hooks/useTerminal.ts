@@ -3,6 +3,7 @@ import { Terminal } from '@xterm/xterm';
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { TERMINAL_LIMITS, TerminalCloseCode } from '@ecc/shared';
 import { attachClipboard } from '../services/terminal-clipboard';
+import { attachLinks } from '../services/terminal-links';
 import {
   chunkInput,
   parseServerMessage,
@@ -85,6 +86,7 @@ export function useTerminal(
     term.loadAddon(fit);
     term.open(container);
     attachClipboard(term);
+    attachLinks(term);
 
     const safeFit = () => {
       if (container.clientWidth > 0 && container.clientHeight > 0) {

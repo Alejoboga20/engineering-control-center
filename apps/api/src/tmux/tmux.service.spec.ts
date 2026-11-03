@@ -90,7 +90,7 @@ describe('TmuxService', () => {
     const { service } = setup();
     expect(service.attachCommand('alpha')).toEqual({
       file: '/usr/bin/tmux',
-      args: ['-L', 'ecc', '-u', '-T', 'RGB', 'attach-session', '-t', '=alpha'],
+      args: ['-L', 'ecc', '-u', '-T', 'RGB,hyperlinks', 'attach-session', '-t', '=alpha'],
     });
   });
 

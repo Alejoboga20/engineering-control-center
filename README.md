@@ -217,8 +217,12 @@ Terminal output passes through memory only. It is never written to disk by the d
 - **Copy:** drag to select, then Ctrl+Shift+C (Cmd+C on a Mac). Selection works in every program, including
   Claude Code. Copies made by tmux or by programs using OSC 52, such as Claude Code's `/copy`, also reach
   the browser clipboard, which needs HTTPS or localhost. Programs can write to the clipboard but never read it.
-- **Mouse clicks** are not sent to programs in the terminal, as that would disable text selection. The wheel
-  still works.
+- **Links:** click a `http` or `https` link to open it in a new tab. Hover over it first to see its real target,
+  because a program can make a link's text say anything. Other link types do not open. Links that programs mark
+  with OSC 8 need tmux 3.4 or newer. A plain-text URL that a program split across lines opens only the part on the
+  line you click, so check the target of long URLs.
+- **Mouse clicks** are otherwise not sent to programs in the terminal, as that would disable text selection. The
+  wheel still works.
 - **Paste:** Ctrl+Shift+V (Cmd+V on a Mac).
 - **Reserved keys:** browsers keep a few shortcuts for themselves, notably Ctrl+W and Ctrl+T. Installing the
   dashboard as a browser app (PWA window) can free some of them.
