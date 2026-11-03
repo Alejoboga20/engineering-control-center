@@ -101,6 +101,9 @@ All settings are environment variables. In production, put them in `/etc/enginee
 | `ECC_TMUX_SOCKET` | unset | Use a dedicated tmux server (`tmux -L`). Unset, the dashboard shares the default server with your SSH logins. |
 | `ECC_WEB_DIST` | `apps/web/dist` | Compiled frontend location |
 | `ECC_STATE_DIR` | `~/.config/engineering-control-center` | Private directory for the Claude Code hook token. If set, set it too when running `pnpm claude-hooks install`. |
+| `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude Code's user directory, read by the Configuration tab |
+| `ECC_CLAUDE_KNOWLEDGE_DIRS` | unset | Comma-separated Markdown directories for the Configuration tab. Absolute: global. Relative: inside each project. |
+| `ECC_CLAUDE_SYMLINK_TARGETS` | unset | Comma-separated absolute directories that symlinks in Claude Code configuration may point into. Others are not followed. |
 
 ## Deploying on Ubuntu
 
@@ -225,6 +228,17 @@ Sessions created in the dashboard are then monitored automatically. Sessions cre
 unless you start Claude Code with `ECC_TMUX_SESSION=<session name> claude`. See
 [docs/claude-monitoring.md](docs/claude-monitoring.md) for how it works, and its limitations.
 
+## Browsing Claude Code configuration
+
+The **Configuration** tab shows agents, Skills, instructions and rules, hook registrations, and settings, for the
+global scope and for each project under `ECC_PROJECT_ROOTS`. It is strictly read-only and reads the files on each
+request. Hook commands, permission rules, environment values and unknown settings are never sent to the browser,
+but Markdown bodies are shown as written, so do not keep secrets in them.
+
+If your configuration is symlinked from elsewhere, such as a dotfiles repository, it stays hidden until you approve
+that location in `ECC_CLAUDE_SYMLINK_TARGETS`. See [docs/claude-configuration.md](docs/claude-configuration.md) for
+locations, the API, security and limitations.
+
 ## Using the terminal
 
 - **Scrolling:** in a shell, the mouse wheel scrolls tmux history. Full-screen programs that track the mouse,
@@ -240,6 +254,8 @@ unless you start Claude Code with `ECC_TMUX_SESSION=<session name> claude`. See
 - **Mouse clicks** are otherwise not sent to programs in the terminal, as that would disable text selection. The
   wheel still works.
 - **Paste:** Ctrl+Shift+V (Cmd+V on a Mac).
+- **Line breaks:** Shift+Enter adds a line in Claude Code's input without submitting. It sends ESC followed by
+  Enter, so other programs see Alt+Enter.
 - **Reserved keys:** browsers keep a few shortcuts for themselves, notably Ctrl+W and Ctrl+T. Installing the
   dashboard as a browser app (PWA window) can free some of them.
 - **Disconnect** leaves everything running. **Terminate** kills the session.

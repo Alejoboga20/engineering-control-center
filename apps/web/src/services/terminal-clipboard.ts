@@ -1,4 +1,5 @@
 import type { Terminal } from '@xterm/xterm';
+import { handleShiftEnter } from './terminal-keys';
 
 const MOUSE_TRACKING_MODES = new Set([9, 1000, 1001, 1002, 1003, 1005, 1006, 1015, 1016]);
 
@@ -42,6 +43,7 @@ export function attachClipboard(term: Terminal): void {
 
   // Ctrl+Shift+C and Ctrl+Shift+V, since plain Ctrl+C belongs to the application in the terminal.
   term.attachCustomKeyEventHandler((event) => {
+    if (handleShiftEnter(term, event)) return false;
     if (event.type !== 'keydown' || !event.ctrlKey || !event.shiftKey) return true;
     if (event.code === 'KeyC') {
       event.preventDefault();

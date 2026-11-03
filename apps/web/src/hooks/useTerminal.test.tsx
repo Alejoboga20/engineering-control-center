@@ -210,6 +210,38 @@ describe('terminal connection', () => {
     expect(writeText).toHaveBeenCalledWith('selected');
     expect(handler(new KeyboardEvent('keydown', { code: 'KeyV', ctrlKey: true, shiftKey: true }))).toBe(false);
   });
+
+  describe('Shift+Enter', () => {
+    const key = (type: string, init: KeyboardEventInit) =>
+      new KeyboardEvent(type, { key: 'Enter', code: 'Enter', ...init });
+
+    it('sends ESC CR once, as input, and keeps xterm.js from sending a carriage return', async () => {
+      await mount();
+      const socket = FakeWebSocket.last;
+      act(() => socket.serverReady());
+      socket.sent.length = 0;
+      const handler = terminals[0].keyHandler!;
+
+      expect(handler(key('keydown', { shiftKey: true }))).toBe(false);
+      expect(handler(key('keypress', { shiftKey: true }))).toBe(false);
+      expect(handler(key('keyup', { shiftKey: true }))).toBe(false);
+      expect(parseSent(socket)).toEqual([{ type: 'input', data: '\x1b\r' }]);
+    });
+
+    it.each([
+      ['Enter', {}],
+      ['Ctrl+Shift+Enter', { shiftKey: true, ctrlKey: true }],
+      ['Alt+Shift+Enter', { shiftKey: true, altKey: true }],
+      ['Cmd+Shift+Enter', { shiftKey: true, metaKey: true }],
+    ])('leaves %s to the terminal', async (_label, init) => {
+      await mount();
+      const socket = FakeWebSocket.last;
+      act(() => socket.serverReady());
+      socket.sent.length = 0;
+      expect(terminals[0].keyHandler!(key('keydown', init))).toBe(true);
+      expect(socket.sent).toEqual([]);
+    });
+  });
 });
 
 describe('terminal clipboard', () => {

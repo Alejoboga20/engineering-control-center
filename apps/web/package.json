@@ -16,7 +16,9 @@
     "@xterm/addon-web-links": "^0.11.0",
     "@xterm/xterm": "^5.5.0",
     "react": "^19.1.10",
-    "react-dom": "^19.1.10"
+    "react-dom": "^19.1.10",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.0",

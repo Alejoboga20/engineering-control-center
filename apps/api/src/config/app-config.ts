@@ -1,5 +1,5 @@
 import { homedir } from 'node:os';
-import { isAbsolute, join, resolve } from 'node:path';
+import { isAbsolute, join, normalize, resolve, sep } from 'node:path';
 
 export interface AppConfig {
   host: string;
@@ -14,6 +14,17 @@ export interface AppConfig {
   webDistPath: string;
   /** Private directory for files the backend shares with the Claude Code hook reporter. */
   stateDir: string;
+  /** Claude Code's user directory. Canonicalized when used. */
+  claudeConfigDir: string;
+  /** Administrator-approved Markdown directories outside Claude Code's own structure. */
+  claudeKnowledgeDirs: {
+    /** Absolute. Shown in the global scope. */
+    global: string[];
+    /** Relative to each project. Shown in the project scope. */
+    project: string[];
+  };
+  /** Directories that a symlink in a configuration location may point into. */
+  claudeSymlinkTargets: string[];
 }
 
 export const APP_CONFIG = Symbol('APP_CONFIG');
@@ -33,6 +44,35 @@ function splitList(value: string | undefined): string[] {
 
 function expandHome(path: string): string {
   return path === '~' || path.startsWith('~/') ? join(homedir(), path.slice(1)) : path;
+}
+
+function loadKnowledgeDirs(value: string | undefined): AppConfig['claudeKnowledgeDirs'] {
+  const dirs: AppConfig['claudeKnowledgeDirs'] = { global: [], project: [] };
+  for (const entry of splitList(value).map(expandHome)) {
+    if (isAbsolute(entry)) {
+      dirs.global.push(resolve(entry));
+      continue;
+    }
+    const relativeDir = normalize(entry).replace(/[/\\]+$/, '');
+    if (relativeDir === '.' || relativeDir.split(sep).includes('..')) {
+      throw new Error(
+        `ECC_CLAUDE_KNOWLEDGE_DIRS entries must be absolute, or inside the project, got "${entry}"`,
+      );
+    }
+    dirs.project.push(relativeDir);
+  }
+  return dirs;
+}
+
+function loadSymlinkTargets(value: string | undefined): string[] {
+  return splitList(value)
+    .map(expandHome)
+    .map((target) => {
+      if (!isAbsolute(target)) {
+        throw new Error(`ECC_CLAUDE_SYMLINK_TARGETS entries must be absolute paths, got "${target}"`);
+      }
+      return resolve(target);
+    });
 }
 
 export function loadConfig(env: Env = process.env): AppConfig {
@@ -97,5 +137,10 @@ export function loadConfig(env: Env = process.env): AppConfig {
     stateDir: env.ECC_STATE_DIR?.trim()
       ? resolve(expandHome(env.ECC_STATE_DIR.trim()))
       : join(homedir(), '.config', 'engineering-control-center'),
+    claudeConfigDir: env.CLAUDE_CONFIG_DIR?.trim()
+      ? resolve(expandHome(env.CLAUDE_CONFIG_DIR.trim()))
+      : join(homedir(), '.claude'),
+    claudeKnowledgeDirs: loadKnowledgeDirs(env.ECC_CLAUDE_KNOWLEDGE_DIRS),
+    claudeSymlinkTargets: loadSymlinkTargets(env.ECC_CLAUDE_SYMLINK_TARGETS),
   };
 }

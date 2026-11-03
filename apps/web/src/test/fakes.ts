@@ -108,6 +108,9 @@ export class FakeTerminal {
   attachCustomWheelEventHandler(handler: (event: WheelEvent) => boolean) {
     this.wheelHandler = handler;
   }
+  input(data: string) {
+    this.dataListener?.(data);
+  }
   type(data: string) {
     this.dataListener?.(data);
   }
