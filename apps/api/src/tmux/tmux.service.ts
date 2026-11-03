@@ -129,8 +129,9 @@ export class TmuxService implements OnModuleInit {
 
   /**
    * Arguments for the client process run inside the PTY. It never creates a session, and killing
-   * it only detaches. `-u` forces UTF-8, and `-T RGB` enables 24-bit color for this client alone,
-   * without changing any server option.
+   * it only detaches. `-u` forces UTF-8, and `-T` enables 24-bit color and OSC 8 hyperlinks for this
+   * client alone, without changing any server option. tmux older than 3.4 stops at the hyperlinks
+   * feature it does not know, so RGB comes first.
    */
   attachCommand(name: string): { file: string; args: string[] } {
     return {
@@ -139,7 +140,7 @@ export class TmuxService implements OnModuleInit {
         ...this.runner.serverArgs(),
         '-u',
         '-T',
-        'RGB',
+        'RGB,hyperlinks',
         'attach-session',
         '-t',
         exactSession(name),

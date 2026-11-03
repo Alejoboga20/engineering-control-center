@@ -1,5 +1,6 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { WebLinksAddon } from '@xterm/addon-web-links';
 import { StrictMode } from 'react';
 import { TERMINAL_LIMITS, TerminalCloseCode } from '@ecc/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -260,6 +261,70 @@ describe('terminal clipboard', () => {
     vi.stubGlobal('navigator', {});
     await mount();
     expect(terminals[0].oscHandler!(`c;${btoa('text')}`)).toBe(true);
+  });
+});
+
+describe('terminal links', () => {
+  type LinkHandler = {
+    activate: (event: MouseEvent, uri: string) => void;
+    hover: (event: MouseEvent, uri: string) => void;
+    leave: () => void;
+  };
+  const click = new MouseEvent('click');
+
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    installBrowserFakes();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it.each(['https://example.com/a?b=1', 'http://localhost:8080/'])(
+    'opens %s in a new tab without a handle on the dashboard',
+    async (uri) => {
+      const open = vi.spyOn(window, 'open').mockReturnValue(null);
+      await mount();
+      (terminals[0].options.linkHandler as LinkHandler).activate(click, uri);
+      expect(open).toHaveBeenCalledWith(uri, '_blank', 'noopener,noreferrer');
+    },
+  );
+
+  it.each(['javascript:alert(1)', 'file:///etc/passwd', 'data:text/html,x', 'not a url'])(
+    'refuses to open %s',
+    async (uri) => {
+      const open = vi.spyOn(window, 'open').mockReturnValue(null);
+      await mount();
+      (terminals[0].options.linkHandler as LinkHandler).activate(click, uri);
+      expect(open).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not open a link when a drag across it selected text', async () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    await mount();
+    terminals[0].hasSelection.mockReturnValue(true);
+    (terminals[0].options.linkHandler as LinkHandler).activate(click, 'https://example.com/');
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it('shows the real target of a link while hovering over it', async () => {
+    await mount();
+    const term = terminals[0];
+    const handler = term.options.linkHandler as LinkHandler;
+    handler.hover(click, 'https://example.com/');
+    expect(term.element.title).toBe('https://example.com/');
+    handler.leave();
+    expect(term.element.hasAttribute('title')).toBe(false);
+  });
+
+  it('detects URLs in plain text through the web links addon', async () => {
+    await mount();
+    expect(terminals[0].loadAddon.mock.calls.map(([addon]) => addon)).toContainEqual(
+      expect.any(WebLinksAddon),
+    );
   });
 });
 
