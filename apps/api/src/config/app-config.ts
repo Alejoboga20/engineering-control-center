@@ -12,6 +12,8 @@ export interface AppConfig {
   tmuxBin: string;
   tmuxSocket?: string;
   webDistPath: string;
+  /** Private directory for files the backend shares with the Claude Code hook reporter. */
+  stateDir: string;
 }
 
 export const APP_CONFIG = Symbol('APP_CONFIG');
@@ -92,5 +94,8 @@ export function loadConfig(env: Env = process.env): AppConfig {
     webDistPath: env.ECC_WEB_DIST
       ? resolve(env.ECC_WEB_DIST)
       : resolve(__dirname, '../../../web/dist'),
+    stateDir: env.ECC_STATE_DIR?.trim()
+      ? resolve(expandHome(env.ECC_STATE_DIR.trim()))
+      : join(homedir(), '.config', 'engineering-control-center'),
   };
 }

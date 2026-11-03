@@ -100,6 +100,7 @@ All settings are environment variables. In production, put them in `/etc/enginee
 | `ECC_TMUX_BIN` | `tmux` | tmux binary |
 | `ECC_TMUX_SOCKET` | unset | Use a dedicated tmux server (`tmux -L`). Unset, the dashboard shares the default server with your SSH logins. |
 | `ECC_WEB_DIST` | `apps/web/dist` | Compiled frontend location |
+| `ECC_STATE_DIR` | `~/.config/engineering-control-center` | Private directory for the Claude Code hook token. If set, set it too when running `pnpm claude-hooks install`. |
 
 ## Deploying on Ubuntu
 
@@ -209,6 +210,21 @@ Protections in place:
 
 Terminal output passes through memory only. It is never written to disk by the dashboard.
 
+## Monitoring Claude Code
+
+The session list and the strip above the terminal show what Claude Code appears to be doing in each session:
+**Working**, **Needs Attention**, **Idle**, **Offline** or **Unknown**. It uses Claude Code hooks, stores metadata
+in memory only, and never sends prompts, tool arguments or output. States are observations, not guarantees.
+
+```bash
+pnpm claude-hooks install --dry-run
+pnpm claude-hooks install
+```
+
+Sessions created in the dashboard are then monitored automatically. Sessions created elsewhere stay Unknown
+unless you start Claude Code with `ECC_TMUX_SESSION=<session name> claude`. See
+[docs/claude-monitoring.md](docs/claude-monitoring.md) for how it works, and its limitations.
+
 ## Using the terminal
 
 - **Scrolling:** in a shell, the mouse wheel scrolls tmux history. Full-screen programs that track the mouse,
@@ -242,7 +258,8 @@ fake PTY. `test/real-tmux.integration.spec.ts` drives real tmux and real `node-p
 and is skipped if tmux is not installed. Frontend tests use Vitest and Testing Library.
 
 The end-to-end browser procedure is in [docs/manual-integration-test.md](docs/manual-integration-test.md),
-and the terminal protocol in [docs/websocket-protocol.md](docs/websocket-protocol.md).
+the terminal protocol in [docs/websocket-protocol.md](docs/websocket-protocol.md), and Claude Code monitoring
+in [docs/claude-monitoring.md](docs/claude-monitoring.md).
 
 ## Troubleshooting
 

@@ -13,7 +13,8 @@
     "start": "NODE_ENV=production node apps/api/dist/main.js",
     "test": "pnpm --filter @ecc/shared build && pnpm -r test",
     "lint": "pnpm --filter @ecc/shared build && eslint .",
-    "typecheck": "pnpm --filter @ecc/shared build && pnpm -r typecheck"
+    "typecheck": "pnpm --filter @ecc/shared build && pnpm -r typecheck",
+    "claude-hooks": "node scripts/claude-hooks.cjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

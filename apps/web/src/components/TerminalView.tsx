@@ -1,16 +1,19 @@
 import { useRef } from 'react';
 import { useTerminal } from '../hooks/useTerminal';
+import type { ClaudeMonitorView } from '../services/claude-status';
+import { ClaudeStatusDetails } from './ClaudeStatusDetails';
 import { ConnectionStatus } from './ConnectionStatus';
 
 interface TerminalViewProps {
   session: string;
+  monitor: ClaudeMonitorView;
   onTerminate: (session: string) => void;
   onSessionEnded: () => void;
 }
 
 const BUTTON_CLASS = 'rounded border border-line px-2 py-0.5 text-xs hover:border-muted';
 
-export function TerminalView({ session, onTerminate, onSessionEnded }: TerminalViewProps) {
+export function TerminalView({ session, monitor, onTerminate, onSessionEnded }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const { status, message, reconnect, disconnect } = useTerminal(
     session,
@@ -45,6 +48,7 @@ export function TerminalView({ session, onTerminate, onSessionEnded }: TerminalV
           </button>
         </div>
       </header>
+      <ClaudeStatusDetails session={session} monitor={monitor} />
       {message && (
         <p
           role="alert"

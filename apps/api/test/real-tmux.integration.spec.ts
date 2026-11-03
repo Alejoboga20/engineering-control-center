@@ -55,6 +55,97 @@ describeWithTmux('real tmux', () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  describe('Claude Code session mapping', () => {
+    const REPORTER = join(__dirname, '../../../scripts/claude-hook-reporter.cjs');
+    let stateDir: string;
+    let monitored: RunningApp;
+
+    /** Runs the real reporter inside a pane, as a hook of a Claude Code in that pane would. */
+    function report(target: string, eventType: string, claudeSessionId = 'claude-1') {
+      const input = JSON.stringify({ session_id: claudeSessionId, hook_event_name: eventType });
+      const marker = join(stateDir, `done-${Date.now()}`);
+      tmux(
+        'send-keys',
+        '-t',
+        target,
+        `echo '${input}' | ECC_STATE_DIR='${stateDir}' '${process.execPath}' '${REPORTER}'; touch '${marker}'`,
+        'Enter',
+      );
+      return waitUntil(() => existsSync(marker), 10_000);
+    }
+
+    const status = async (name: string) =>
+      (
+        await request(monitored.app.getHttpServer())
+          .get(`/api/claude/status/${name}`)
+          .set('Host', 'localhost:4999')
+          .expect(200)
+      ).body;
+
+    beforeEach(async () => {
+      const config = testConfig({ projectRoots: [root], tmuxSocket: socket });
+      stateDir = config.stateDir;
+      monitored = await startApp(config);
+      const file = join(stateDir, 'claude-hook.json');
+      const credentials = JSON.parse(readFileSync(file, 'utf8'));
+      writeFileSync(file, JSON.stringify({ ...credentials, url: `http://127.0.0.1:${monitored.port}` }));
+    });
+
+    afterEach(async () => {
+      await monitored.app.close();
+      rmSync(stateDir, { recursive: true, force: true });
+    });
+
+    const create = (name: string) =>
+      request(monitored.app.getHttpServer())
+        .post('/api/sessions')
+        .set('Host', 'localhost:4999')
+        .set('Origin', TEST_ORIGIN)
+        .send({ name, workingDirectory: join(root, 'project') })
+        .expect(201);
+
+    it('gives the panes of a created session the variable, including later ones', async () => {
+      await create('mapped');
+      expect(tmux('show-environment', '-t', '=mapped', 'ECC_TMUX_SESSION')).toBe(
+        'ECC_TMUX_SESSION=mapped',
+      );
+      tmux('new-window', '-t', '=mapped:');
+      const marker = join(stateDir, 'env');
+      tmux('send-keys', '-t', '=mapped:', `echo "$ECC_TMUX_SESSION" > '${marker}'`, 'Enter');
+      await waitUntil(() => existsSync(marker) && readFileSync(marker, 'utf8') !== '', 10_000);
+      expect(readFileSync(marker, 'utf8').trim()).toBe('mapped');
+    });
+
+    it('does not put the variable in the server environment, where other sessions get it', async () => {
+      await create('mapped');
+      tmux('new-session', '-d', '-s', 'manual');
+      expect(spawnSync('tmux', ['-L', socket, 'show-environment', '-g', 'ECC_TMUX_SESSION']).status).not.toBe(0);
+      expect(spawnSync('tmux', ['-L', socket, 'show-environment', '-t', '=manual', 'ECC_TMUX_SESSION']).status).not.toBe(0);
+    });
+
+    it('reports from a created session end to end, keeping sessions apart', async () => {
+      await create('one');
+      await create('two');
+      await report('=one:', 'UserPromptSubmit', 'claude-a');
+      await report('=two:', 'Stop', 'claude-b');
+      expect(await status('one')).toMatchObject({ state: 'working', claudeSessionId: 'claude-a' });
+      expect(await status('two')).toMatchObject({ state: 'idle', claudeSessionId: 'claude-b' });
+    });
+
+    it('stays Unknown for a session created outside the dashboard', async () => {
+      tmux('new-session', '-d', '-s', 'manual');
+      await report('=manual:', 'UserPromptSubmit');
+      expect(await status('manual')).toMatchObject({ state: 'unknown', monitored: false });
+    });
+
+    it('reports nothing after a rename, under either name', async () => {
+      await create('before');
+      tmux('rename-session', '-t', '=before', 'after');
+      await report('=after:', 'UserPromptSubmit');
+      expect(await status('after')).toMatchObject({ state: 'unknown', monitored: false });
+    });
+  });
+
   it('reports no sessions when no tmux server is running', async () => {
     const response = await api().get('/api/sessions').expect(200);
     expect(response.body).toEqual([]);

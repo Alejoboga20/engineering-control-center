@@ -4,6 +4,7 @@ import { AppLayout } from './components/AppLayout';
 import { CreateSessionDialog } from './components/CreateSessionDialog';
 import { Sidebar, type View } from './components/Sidebar';
 import { TerminateSessionDialog } from './components/TerminateSessionDialog';
+import { useClaudeStatus } from './hooks/useClaudeStatus';
 import { useSessions } from './hooks/useSessions';
 import { useSystemStats } from './hooks/useSystemStats';
 import { DashboardPage } from './pages/DashboardPage';
@@ -17,6 +18,7 @@ function sessionFromHash(): string | null {
 export function App() {
   const sessions = useSessions();
   const system = useSystemStats();
+  const monitor = useClaudeStatus();
   const [view, setView] = useState<View>('sessions');
   const [selected, setSelected] = useState<string | null>(sessionFromHash);
   const [creating, setCreating] = useState(false);
@@ -51,6 +53,7 @@ export function App() {
           error={sessions.error}
           selected={selected}
           view={view}
+          monitor={monitor}
           onSelect={select}
           onCreate={() => setCreating(true)}
           onNavigate={setView}
@@ -63,6 +66,7 @@ export function App() {
         <DashboardPage
           selected={selected}
           sessions={sessions.sessions}
+          monitor={monitor}
           onCreate={() => setCreating(true)}
           onTerminate={setTerminating}
           onSessionEnded={sessions.refresh}

@@ -1,4 +1,5 @@
 import type { SessionDto } from '@ecc/shared';
+import type { ClaudeMonitorView } from '../services/claude-status';
 import { SessionItem } from './SessionItem';
 
 interface SessionListProps {
@@ -6,10 +7,18 @@ interface SessionListProps {
   loading: boolean;
   error: string | null;
   selected: string | null;
+  monitor: ClaudeMonitorView;
   onSelect: (name: string) => void;
 }
 
-export function SessionList({ sessions, loading, error, selected, onSelect }: SessionListProps) {
+export function SessionList({
+  sessions,
+  loading,
+  error,
+  selected,
+  monitor,
+  onSelect,
+}: SessionListProps) {
   if (loading && !sessions) {
     return <p className="px-2 py-1 text-xs text-muted">Loading sessions…</p>;
   }
@@ -30,6 +39,7 @@ export function SessionList({ sessions, loading, error, selected, onSelect }: Se
               key={session.name}
               session={session}
               selected={session.name === selected}
+              monitor={monitor}
               onSelect={onSelect}
             />
           ))}

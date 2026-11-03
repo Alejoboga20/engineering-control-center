@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { TerminalCloseCode } from '@ecc/shared';
+import { TerminalCloseCode, type ClaudeSessionStatus } from '@ecc/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { FakeWebSocket, installBrowserFakes } from './test/fakes';
@@ -221,6 +221,186 @@ describe('App', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Server' }));
     expect(screen.getByText('Uptime')).toBeInTheDocument();
     expect(screen.getByText('1d 1h')).toBeInTheDocument();
+  });
+
+  describe('Claude Code status', () => {
+    const working: ClaudeSessionStatus = {
+      tmuxSession: 'alpha',
+      state: 'working',
+      monitored: true,
+      reason: null,
+      instanceCount: 1,
+      claudeSessionId: 'claude-1',
+      lastEvent: 'UserPromptSubmit',
+      lastEventAt: new Date().toISOString(),
+      lastActivityAt: new Date().toISOString(),
+    };
+
+    async function monitorSocket(index = 0) {
+      await waitFor(() => expect(FakeWebSocket.monitors.length).toBeGreaterThan(index), {
+        timeout: 3000,
+      });
+      return FakeWebSocket.monitors[index];
+    }
+
+    function snapshot(socket: FakeWebSocket, sessions: ClaudeSessionStatus[], ingestion = true) {
+      act(() =>
+        socket.serverSend({
+          type: 'claude.status.snapshot',
+          data: { ingestionAvailable: ingestion, sessions },
+        }),
+      );
+    }
+
+    function changed(socket: FakeWebSocket, status: ClaudeSessionStatus) {
+      act(() => socket.serverSend({ type: 'claude.status.changed', data: status }));
+    }
+
+    async function sessionRow(name: RegExp) {
+      return within(await screen.findByRole('button', { name }));
+    }
+
+    it.each([
+      ['working', 'Working'],
+      ['needs_attention', 'Needs Attention'],
+      ['idle', 'Idle'],
+      ['offline', 'Offline'],
+      ['unknown', 'Unknown'],
+    ] as const)('labels the %s state in text', async (state, label) => {
+      mockApi([alpha]);
+      render(<App />);
+      snapshot(await monitorSocket(), [{ ...working, state }]);
+      expect((await sessionRow(/alpha/)).getByText(label)).toBeInTheDocument();
+    });
+
+    it('shows Unknown before any status arrives, and for sessions without one', async () => {
+      mockApi([alpha, beta]);
+      render(<App />);
+      const row = await sessionRow(/beta/);
+      expect(row.getByText('Unknown')).toBeInTheDocument();
+      snapshot(await monitorSocket(), [working]);
+      expect((await sessionRow(/beta/)).getByText('Unknown')).toBeInTheDocument();
+    });
+
+    it('never infers activity from tmux attachment', async () => {
+      mockApi([{ ...alpha, attachedClients: 3 }]);
+      render(<App />);
+      snapshot(await monitorSocket(), []);
+      expect((await sessionRow(/alpha/)).getByText('Unknown')).toBeInTheDocument();
+    });
+
+    it('updates a session immediately when a status event arrives', async () => {
+      mockApi([alpha, beta]);
+      render(<App />);
+      const socket = await monitorSocket();
+      snapshot(socket, [working]);
+      expect((await sessionRow(/alpha/)).getByText('Working')).toBeInTheDocument();
+      changed(socket, { ...working, state: 'needs_attention', lastEvent: 'PermissionRequest' });
+      expect((await sessionRow(/alpha/)).getByText('Needs Attention')).toBeInTheDocument();
+      expect((await sessionRow(/beta/)).getByText('Unknown')).toBeInTheDocument();
+    });
+
+    it('ignores malformed messages', async () => {
+      mockApi([alpha]);
+      render(<App />);
+      const socket = await monitorSocket();
+      snapshot(socket, [working]);
+      act(() => {
+        socket.onmessage?.({ data: 'not json' });
+        socket.onmessage?.({ data: new ArrayBuffer(1) });
+        socket.serverSend({ type: 'something.else', data: {} });
+      });
+      expect((await sessionRow(/alpha/)).getByText('Working')).toBeInTheDocument();
+    });
+
+    it('drops to Unknown on disconnect, rather than showing a stale state', async () => {
+      window.location.hash = '#/alpha';
+      mockApi([alpha]);
+      render(<App />);
+      const socket = await monitorSocket();
+      snapshot(socket, [working]);
+      expect((await sessionRow(/alpha/)).getByText('Working')).toBeInTheDocument();
+      act(() => socket.serverClose(1006));
+      expect((await sessionRow(/alpha/)).getByText('Unknown')).toBeInTheDocument();
+      expect(screen.getByText(/live connection to the server was lost/)).toBeInTheDocument();
+    });
+
+    it('reconnects, and lets the new snapshot replace everything', async () => {
+      mockApi([alpha, beta]);
+      render(<App />);
+      const first = await monitorSocket();
+      snapshot(first, [working, { ...working, tmuxSession: 'beta', state: 'idle' }]);
+      act(() => first.serverClose(1006));
+
+      const second = await monitorSocket(1);
+      snapshot(second, [{ ...working, state: 'idle' }]);
+      expect((await sessionRow(/alpha/)).getByText('Idle')).toBeInTheDocument();
+      expect((await sessionRow(/beta/)).getByText('Unknown')).toBeInTheDocument();
+    });
+
+    it('leaves the terminal connection alone when a status event arrives', async () => {
+      window.location.hash = '#/alpha';
+      mockApi([alpha]);
+      render(<App />);
+      const terminal = await openedSocket();
+      act(() => terminal.serverReady());
+      changed(await monitorSocket(), working);
+      expect(await screen.findByLabelText('Claude Code status')).toHaveTextContent('Working');
+      expect(FakeWebSocket.instances).toHaveLength(1);
+      expect(terminal.closeCalls).toBe(0);
+    });
+
+    it('shows state, last event, activity and availability for the selected session', async () => {
+      window.location.hash = '#/alpha';
+      mockApi([alpha]);
+      render(<App />);
+      snapshot(await monitorSocket(), [working]);
+      const details = within(await screen.findByLabelText('Claude Code status'));
+      expect(details.getByText('Working')).toBeInTheDocument();
+      expect(details.getByText('Last event: UserPromptSubmit')).toBeInTheDocument();
+      expect(details.getByText('Last activity: just now')).toBeInTheDocument();
+      expect(details.getByText('Monitoring: active')).toBeInTheDocument();
+    });
+
+    it.each([
+      [{ state: 'unknown', monitored: false, reason: 'no-events' }, /ECC_TMUX_SESSION=alpha claude/],
+      [{ state: 'unknown', reason: 'stale' }, /no longer reliable/],
+      [{ state: 'unknown', reason: 'insufficient-events' }, /do not establish a state/],
+      [{ state: 'unknown', reason: 'multiple-instances', instanceCount: 2 }, /2 Claude Code instances/],
+      [{ state: 'needs_attention' }, /may already be resolved/],
+    ] as const)('explains %j', async (fields, explanation) => {
+      window.location.hash = '#/alpha';
+      mockApi([alpha]);
+      render(<App />);
+      snapshot(await monitorSocket(), [{ ...working, ...fields }]);
+      expect(await screen.findByText(explanation)).toBeInTheDocument();
+    });
+
+    it('says that monitoring is not available for a session with no events', async () => {
+      window.location.hash = '#/alpha';
+      mockApi([alpha]);
+      render(<App />);
+      snapshot(await monitorSocket(), []);
+      expect(await screen.findByText('Monitoring: not available')).toBeInTheDocument();
+    });
+
+    it('explains when the server cannot accept events at all', async () => {
+      window.location.hash = '#/alpha';
+      mockApi([alpha]);
+      render(<App />);
+      snapshot(await monitorSocket(), [], false);
+      expect(await screen.findByText(/could not prepare its hook credentials/)).toBeInTheDocument();
+    });
+
+    it('closes the monitor socket on unmount, and does not reconnect', async () => {
+      mockApi([alpha]);
+      const view = render(<App />);
+      const socket = await monitorSocket();
+      view.unmount();
+      expect(socket.closeCalls).toBe(1);
+      await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+      expect(FakeWebSocket.monitors).toHaveLength(1);
+    });
   });
 
   it('refreshes the list when an attached session ends', async () => {

@@ -42,6 +42,34 @@ To test against a remote host, first run `ssh -N -L 3000:127.0.0.1:3000 you@host
 | Run `claude`, get a long reply, and scroll up with the wheel. | The transcript scrolls. Previous prompts are not recalled into the input box. |
 | Run `claude`. | Claude Code's interface works. Close the browser and reopen it: the conversation is still there. |
 
+## Claude Code monitoring
+
+Run `pnpm claude-hooks install` first, then create a session in the dashboard and work in it. Permission
+prompts depend on your permission settings, so use `claude --permission-mode default`. Results of the run made
+when this feature was built are in the table.
+
+| # | Action | Expected | Verified on Claude Code 2.1.317 |
+| --- | --- | --- | --- |
+| 1 | New session, before starting Claude. | **Unknown**, with an explanation. Monitoring: not available. | Yes |
+| 2 | Run `claude`. | **Idle**. | Yes |
+| 3 | Submit a prompt that runs a Bash command. | **Working**. | Yes |
+| 4 | Wait for the permission dialog. | **Needs Attention**, in the list and the strip. | Yes |
+| 5 | Choose Yes. | **Working**, then **Idle** when the response ends. | Yes |
+| 6 | Trigger another dialog, and choose No. | **Needs Attention** remains, a documented limitation. | Yes |
+| 7 | Submit another prompt. | **Working**, then **Idle**. | Yes |
+| 8 | Run `/clear`. | **Idle**, with a new Claude session ID. | Yes |
+| 9 | Run `/exit`. | **Offline**. | Yes |
+| 10 | Close the browser, work in Claude, and reopen. | The current state appears. tmux kept everything. | Reporting without a browser: yes. Closing a real browser mid-turn: no. |
+| 11 | With a dialog open, stop the backend, then choose Yes. | Claude finishes normally. The browser shows **Unknown**. | Yes |
+| 12 | Start the backend again. | **Unknown** until the next event, never the old state. Then live updates, with no reload. | Yes |
+| 13 | Run Claude in two panes of one session. | **Unknown**, naming 2 instances. | Unit tests only |
+| 14 | Press Esc during a long tool. | **Working**, then **Unknown** after 10 minutes. | No |
+| 15 | Have a tool fail, or hit an API error. | **Working** continues, or **Idle** on API error. | Unit tests only |
+| 16 | In a session created over SSH, run `claude`. | **Unknown**. Claude is unaffected. | Reporter and real tmux only |
+| 17 | There, run `ECC_TMUX_SESSION=<name> claude`. | States appear. | Reporter and real tmux only |
+| 18 | `tmux rename-session`, with Claude running. | The session shows **Unknown**. | Reporter and real tmux only |
+| 19 | `pnpm claude-hooks uninstall`. | Only these hooks are gone. A backup exists. | Automated tests, on temporary files |
+
 ## Cleanup
 
 ```bash

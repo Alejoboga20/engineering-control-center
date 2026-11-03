@@ -4,6 +4,7 @@ import type { Response } from 'express';
 
 const STATUS_CODES: Record<number, ApiErrorCode> = {
   400: 'VALIDATION_ERROR',
+  401: 'UNAUTHORIZED',
   403: 'FORBIDDEN',
   404: 'NOT_FOUND',
 };

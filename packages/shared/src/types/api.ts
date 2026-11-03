@@ -52,6 +52,7 @@ export type ApiErrorCode =
   | 'SESSION_ALREADY_EXISTS'
   | 'TMUX_UNAVAILABLE'
   | 'TMUX_ERROR'
+  | 'UNAUTHORIZED'
   | 'FORBIDDEN'
   | 'NOT_FOUND'
   | 'INTERNAL_ERROR';

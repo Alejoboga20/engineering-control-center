@@ -1,4 +1,5 @@
 import type { SessionDto } from '@ecc/shared';
+import type { ClaudeMonitorView } from '../services/claude-status';
 import { SessionList } from './SessionList';
 
 export type View = 'sessions' | 'server';
@@ -9,6 +10,7 @@ interface SidebarProps {
   error: string | null;
   selected: string | null;
   view: View;
+  monitor: ClaudeMonitorView;
   onSelect: (name: string) => void;
   onCreate: () => void;
   onNavigate: (view: View) => void;
@@ -63,6 +65,7 @@ export function Sidebar(props: SidebarProps) {
           loading={props.loading}
           error={props.error}
           selected={props.view === 'sessions' ? props.selected : null}
+          monitor={props.monitor}
           onSelect={props.onSelect}
         />
       </div>

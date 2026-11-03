@@ -13,10 +13,11 @@ vi.mock('@xterm/xterm', async () => ({ Terminal: (await import('../test/fakes'))
 vi.mock('@xterm/addon-fit', () => ({ FitAddon: class { fit() {} } }));
 
 const noop = () => {};
+const MONITOR = { connected: false, ingestionAvailable: true, statuses: {} };
 
 async function mount(onSessionEnded: () => void = noop) {
   const view = render(
-    <TerminalView session="alpha" onTerminate={noop} onSessionEnded={onSessionEnded} />,
+    <TerminalView session="alpha" monitor={MONITOR} onTerminate={noop} onSessionEnded={onSessionEnded} />,
   );
   await act(() => vi.advanceTimersByTimeAsync(1));
   return view;
@@ -50,7 +51,7 @@ describe('terminal connection', () => {
   it('never opens a competing socket under StrictMode double mounting', async () => {
     render(
       <StrictMode>
-        <TerminalView session="alpha" onTerminate={noop} onSessionEnded={noop} />
+        <TerminalView session="alpha" monitor={MONITOR} onTerminate={noop} onSessionEnded={noop} />
       </StrictMode>,
     );
     await act(() => vi.advanceTimersByTimeAsync(5));
