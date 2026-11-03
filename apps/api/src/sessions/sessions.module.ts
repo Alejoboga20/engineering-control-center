@@ -9,5 +9,6 @@ import { SessionsService } from './sessions.service';
   imports: [TmuxModule, ClaudeMonitoringModule],
   controllers: [SessionsController],
   providers: [SessionsService, ProjectDirectoriesService],
+  exports: [ProjectDirectoriesService],
 })
 export class SessionsModule {}

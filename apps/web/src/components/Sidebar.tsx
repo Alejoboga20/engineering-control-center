@@ -2,7 +2,7 @@ import type { SessionDto } from '@ecc/shared';
 import type { ClaudeMonitorView } from '../services/claude-status';
 import { SessionList } from './SessionList';
 
-export type View = 'sessions' | 'server';
+export type View = 'sessions' | 'server' | 'configuration';
 
 interface SidebarProps {
   sessions: SessionDto[] | null;
@@ -22,7 +22,7 @@ function NavButton(props: { active: boolean; label: string; onClick: () => void 
       type="button"
       onClick={props.onClick}
       aria-current={props.active ? 'page' : undefined}
-      className={`flex-1 rounded px-2 py-1 text-xs ${
+      className={`flex-auto rounded px-1.5 py-1 text-xs whitespace-nowrap ${
         props.active ? 'bg-overlay text-ink' : 'text-muted hover:text-ink'
       }`}
     >
@@ -47,6 +47,11 @@ export function Sidebar(props: SidebarProps) {
           label="Server"
           active={props.view === 'server'}
           onClick={() => props.onNavigate('server')}
+        />
+        <NavButton
+          label="Configuration"
+          active={props.view === 'configuration'}
+          onClick={() => props.onNavigate('configuration')}
         />
       </nav>
       <div className="flex items-center justify-between px-4 py-2">

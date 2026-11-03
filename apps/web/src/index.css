@@ -28,3 +28,84 @@ body {
   height: 100%;
   padding: 8px 0 0 10px;
 }
+
+/* Read-only Markdown from configuration files. */
+.markdown {
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.markdown > * + * {
+  margin-top: 0.75em;
+}
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  font-weight: 600;
+  margin-top: 1.25em;
+}
+.markdown h1 {
+  font-size: 1.3em;
+}
+.markdown h2 {
+  font-size: 1.15em;
+  border-bottom: 1px solid var(--color-line);
+  padding-bottom: 0.25em;
+}
+.markdown h3 {
+  font-size: 1.05em;
+}
+.markdown ul,
+.markdown ol {
+  padding-left: 1.5em;
+}
+.markdown ul {
+  list-style: disc;
+}
+.markdown ol {
+  list-style: decimal;
+}
+.markdown a {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+.markdown code {
+  background: var(--color-overlay);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  padding: 0.1em 0.3em;
+}
+.markdown pre {
+  background: var(--color-raised);
+  border: 1px solid var(--color-line);
+  border-radius: 6px;
+  overflow-x: auto;
+  padding: 0.75em;
+}
+.markdown pre code {
+  background: none;
+  overflow-wrap: normal;
+  padding: 0;
+}
+.markdown blockquote {
+  border-left: 3px solid var(--color-line);
+  color: var(--color-muted);
+  padding-left: 0.75em;
+}
+.markdown table {
+  border-collapse: collapse;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.markdown th,
+.markdown td {
+  border: 1px solid var(--color-line);
+  padding: 0.25em 0.5em;
+  text-align: left;
+}
+.markdown hr {
+  border-color: var(--color-line);
+}

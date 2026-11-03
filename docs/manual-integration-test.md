@@ -40,6 +40,7 @@ To test against a remote host, first run `ssh -N -L 3000:127.0.0.1:3000 you@host
 | Drag across text, in a shell and in `claude`, then copy and paste it elsewhere. | The terminal text highlights, not the page around it, and the pasted text matches. |
 | Run `echo https://example.com/` and `printf '\e]8;;https://example.com/\e\\label\e]8;;\e\\\n'`, then click each. | Both open `https://example.com/` in a new tab. Hovering shows the target. |
 | Run `claude`, get a long reply, and scroll up with the wheel. | The transcript scrolls. Previous prompts are not recalled into the input box. |
+| In `claude`, type text, press Shift+Enter, and type more. | A second input line appears, with nothing submitted. |
 | Run `claude`. | Claude Code's interface works. Close the browser and reopen it: the conversation is still there. |
 
 ## Claude Code monitoring
@@ -69,6 +70,21 @@ when this feature was built are in the table.
 | 17 | There, run `ECC_TMUX_SESSION=<name> claude`. | States appear. | Reporter and real tmux only |
 | 18 | `tmux rename-session`, with Claude running. | The session shows **Unknown**. | Reporter and real tmux only |
 | 19 | `pnpm claude-hooks uninstall`. | Only these hooks are gone. A backup exists. | Automated tests, on temporary files |
+
+## Claude Code configuration explorer
+
+Results of the run made when this feature was built are in the table. It used the real configuration, read-only.
+
+| # | Action | Expected | Verified on Claude Code 2.1.317 |
+| --- | --- | --- | --- |
+| 1 | Open **Configuration**. | Global agents are listed. Nothing offers to edit. | Yes |
+| 2 | Select an agent. | Metadata, relative path, scope, rendered Markdown. | Yes |
+| 3 | Open **Hooks**. | Events, counts and types, with no commands. Automated comparison with `settings.json` finds no leak. | Yes |
+| 4 | Open **Settings**. | Grouped safe fields, a notice, and a hidden-field count. | Yes |
+| 5 | With configuration symlinked elsewhere, unset `ECC_CLAUDE_SYMLINK_TARGETS`. | Those items disappear, and a count of skipped symlinks appears. | Automated tests |
+| 6 | Choose scope **Project**, and a project with an agent containing `<script>`. | The label says Project, and the script shows as text. | Yes |
+| 7 | Change a file, and choose **Refresh**. | The change appears. | Automated tests |
+| 8 | Use a narrow window. | The list stacks above the details, with no sideways page scroll. | No |
 
 ## Cleanup
 

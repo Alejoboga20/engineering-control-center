@@ -22,6 +22,10 @@ export function testConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     webDistPath: '/nonexistent',
     // Every test gets its own directory, so that tests never touch real hook credentials.
     stateDir: mkdtempSync(join(tmpdir(), 'ecc-state-')),
+    // Likewise, tests never read the real Claude Code configuration.
+    claudeConfigDir: mkdtempSync(join(tmpdir(), 'ecc-claude-')),
+    claudeKnowledgeDirs: { global: [], project: [] },
+    claudeSymlinkTargets: [],
     ...overrides,
   };
 }

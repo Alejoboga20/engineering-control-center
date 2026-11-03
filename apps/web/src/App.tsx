@@ -8,6 +8,7 @@ import { useClaudeStatus } from './hooks/useClaudeStatus';
 import { useSessions } from './hooks/useSessions';
 import { useSystemStats } from './hooks/useSystemStats';
 import { DashboardPage } from './pages/DashboardPage';
+import { ConfigurationPage } from './pages/ConfigurationPage';
 import { ServerPage } from './pages/ServerPage';
 
 function sessionFromHash(): string | null {
@@ -62,6 +63,8 @@ export function App() {
     >
       {view === 'server' ? (
         <ServerPage system={system} />
+      ) : view === 'configuration' ? (
+        <ConfigurationPage />
       ) : (
         <DashboardPage
           selected={selected}

@@ -1,5 +1,11 @@
 import type {
   ApiErrorResponse,
+  ClaudeConfigScope,
+  ClaudeConfigScopesResponse,
+  ClaudeHooksResponse,
+  ClaudeResourceDetail,
+  ClaudeResourceListResponse,
+  ClaudeSettingsResponse,
   CreateSessionRequest,
   ProjectsResponse,
   SessionDto,
@@ -37,6 +43,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+export type ClaudeResourceListName = 'agents' | 'skills' | 'knowledge';
+
+export interface ClaudeConfigSelection {
+  scope: ClaudeConfigScope;
+  project: string | null;
+}
+
+function configQuery({ scope, project }: ClaudeConfigSelection): string {
+  const params = new URLSearchParams({ scope });
+  if (scope === 'project' && project) params.set('project', project);
+  return `?${params.toString()}`;
+}
+
 export const api = {
   listSessions: () => request<SessionDto[]>('/sessions'),
   createSession: (body: CreateSessionRequest) =>
@@ -49,4 +68,13 @@ export const api = {
     request<void>(`/sessions/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   listProjects: () => request<ProjectsResponse>('/projects'),
   getSystemStats: () => request<SystemStatsDto>('/system/stats'),
+  getClaudeConfigScopes: () => request<ClaudeConfigScopesResponse>('/claude/config/scopes'),
+  listClaudeResources: (name: ClaudeResourceListName, selection: ClaudeConfigSelection) =>
+    request<ClaudeResourceListResponse>(`/claude/config/${name}${configQuery(selection)}`),
+  getClaudeResource: (id: string) =>
+    request<ClaudeResourceDetail>(`/claude/config/resources/${encodeURIComponent(id)}`),
+  getClaudeHooks: (selection: ClaudeConfigSelection) =>
+    request<ClaudeHooksResponse>(`/claude/config/hooks${configQuery(selection)}`),
+  getClaudeSettings: (selection: ClaudeConfigSelection) =>
+    request<ClaudeSettingsResponse>(`/claude/config/settings${configQuery(selection)}`),
 };
