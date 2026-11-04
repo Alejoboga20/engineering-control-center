@@ -228,6 +228,11 @@ Sessions created in the dashboard are then monitored automatically. Sessions cre
 unless you start Claude Code with `ECC_TMUX_SESSION=<session name> claude`. See
 [docs/claude-monitoring.md](docs/claude-monitoring.md) for how it works, and its limitations.
 
+The page title counts sessions that need attention, as in `(2) Engineering Control Center`. To also get a browser
+notification, click the bell beside **New session** and allow notifications. This needs HTTPS or localhost, so it
+works through SSH forwarding and `tailscale serve`, and only while the dashboard stays open in a tab. See
+[Attention notifications](docs/claude-monitoring.md#attention-notifications).
+
 ## Browsing Claude Code configuration
 
 The **Configuration** tab shows agents, Skills, instructions and rules, hook registrations, and settings, for the

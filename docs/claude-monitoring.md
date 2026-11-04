@@ -123,6 +123,35 @@ After a backend restart nothing is restored: every session is Unknown until its 
 never shown as current. State is also dropped when a session disappears from tmux, and events older than a
 session cannot apply to a new session that reuses the name.
 
+## Attention notifications
+
+The page title always shows how many sessions need attention, as in `(2) Engineering Control Center`. The bell
+beside **New session** adds browser notifications. It is off until you click it, and the choice is remembered in
+that browser. This is entirely in the browser: the backend is unchanged, and an alert never answers Claude Code.
+Clicking one only opens the session.
+
+- **When an alert appears:** when a session enters Needs Attention. Sessions already waiting when the page opens
+  are not announced, though the title counts them. A session that entered Needs Attention while the connection
+  was down is announced on reconnecting.
+- **When it stays quiet:** when that session is on screen in a focused window. Other sessions still alert.
+- **When an alert closes:** when you click it, when the session leaves Needs Attention, or when you turn the bell off.
+- **What it shows:** the session name and a fixed sentence, never prompts or tool names, because it can appear on
+  a lock screen.
+
+Limitations:
+
+- **The page must stay open.** With every dashboard tab closed, or a tab the browser has discarded to save
+  memory, nothing can alert you. Alerting with the browser closed would need a push service.
+- **HTTPS or localhost is required,** so SSH forwarding and `tailscale serve` work, and a plain `http://` address
+  does not. The title count works everywhere.
+- **Phones:** Android browsers allow notifications only from an installed app, and iOS only from a web app added
+  to the home screen, so the bell reports this or is unavailable there.
+- **The operating system can hide them.** Check its notification settings for the browser, and any Do Not Disturb
+  mode. The confirmation sent on turning the bell on shows whether they get through.
+- **It inherits the limitations below.** A second request in a session already in Needs Attention changes no state,
+  so it does not alert again. After a denied request the state remains until the next prompt, so the next request
+  may not alert either. No alert does not mean Claude is not waiting.
+
 ## API
 
 | Endpoint | Access | Purpose |

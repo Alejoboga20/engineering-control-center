@@ -1,5 +1,7 @@
 import type { SessionDto } from '@ecc/shared';
 import type { ClaudeMonitorView } from '../services/claude-status';
+import type { AttentionNotificationControl } from '../hooks/useAttentionNotifications';
+import { AttentionNotificationToggle } from './AttentionNotificationToggle';
 import { SessionList } from './SessionList';
 
 export type View = 'sessions' | 'server' | 'configuration';
@@ -11,6 +13,7 @@ interface SidebarProps {
   selected: string | null;
   view: View;
   monitor: ClaudeMonitorView;
+  notifications: AttentionNotificationControl;
   onSelect: (name: string) => void;
   onCreate: () => void;
   onNavigate: (view: View) => void;
@@ -55,15 +58,23 @@ export function Sidebar(props: SidebarProps) {
         />
       </nav>
       <div className="flex items-center justify-between px-4 py-2">
-        <h2 className="text-xs font-medium tracking-wide text-muted uppercase">tmux sessions</h2>
-        <button
-          type="button"
-          onClick={props.onCreate}
-          className="rounded border border-line px-2 py-0.5 text-xs hover:border-accent hover:text-accent"
-        >
-          New session
-        </button>
+        <h2 className="text-xs font-medium tracking-wide whitespace-nowrap text-muted uppercase">
+          tmux sessions
+        </h2>
+        <div className="flex items-center gap-1.5">
+          <AttentionNotificationToggle control={props.notifications} />
+          <button
+            type="button"
+            onClick={props.onCreate}
+            className="rounded border border-line px-2 py-0.5 text-xs whitespace-nowrap hover:border-accent hover:text-accent"
+          >
+            New session
+          </button>
+        </div>
       </div>
+      {props.notifications.unavailableReason && (
+        <p className="px-4 pb-2 text-xs text-muted">{props.notifications.unavailableReason}</p>
+      )}
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
         <SessionList
           sessions={props.sessions}

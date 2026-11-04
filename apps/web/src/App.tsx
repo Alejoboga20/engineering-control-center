@@ -4,6 +4,7 @@ import { AppLayout } from './components/AppLayout';
 import { CreateSessionDialog } from './components/CreateSessionDialog';
 import { Sidebar, type View } from './components/Sidebar';
 import { TerminateSessionDialog } from './components/TerminateSessionDialog';
+import { useAttentionNotifications } from './hooks/useAttentionNotifications';
 import { useClaudeStatus } from './hooks/useClaudeStatus';
 import { useSessions } from './hooks/useSessions';
 import { useSystemStats } from './hooks/useSystemStats';
@@ -32,6 +33,12 @@ export function App() {
     window.history.replaceState(null, '', name ? `#/${encodeURIComponent(name)}` : '#/');
   }, []);
 
+  const notifications = useAttentionNotifications({
+    monitor,
+    viewing: view === 'sessions' ? selected : null,
+    onOpen: select,
+  });
+
   const createSession = async (request: CreateSessionRequest) => {
     const created = await sessions.createSession(request);
     setCreating(false);
@@ -55,6 +62,7 @@ export function App() {
           selected={selected}
           view={view}
           monitor={monitor}
+          notifications={notifications}
           onSelect={select}
           onCreate={() => setCreating(true)}
           onNavigate={setView}

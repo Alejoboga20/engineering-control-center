@@ -71,6 +71,22 @@ when this feature was built are in the table.
 | 18 | `tmux rename-session`, with Claude running. | The session shows **Unknown**. | Reporter and real tmux only |
 | 19 | `pnpm claude-hooks uninstall`. | Only these hooks are gone. A backup exists. | Automated tests, on temporary files |
 
+## Attention notifications
+
+Use a dashboard at `http://localhost:3000`, with hooks installed and Claude Code running in a session.
+
+| # | Action | Expected |
+| --- | --- | --- |
+| 1 | Trigger a permission dialog. | The tab title starts with `(1)`, whether or not the bell is on. |
+| 2 | Answer it. | The count disappears. |
+| 3 | Click the bell, and allow notifications. | A confirmation notification appears, and the bell fills. |
+| 4 | Switch to another application, and trigger a dialog. | A notification names the session, with no prompt or tool. |
+| 5 | Click it. | The browser comes forward with that session open. Nothing is answered. |
+| 6 | Trigger a dialog, and answer it through a terminal without clicking the alert. | The notification closes. |
+| 7 | Keep the window focused on the session, and trigger a dialog. | No notification. The count appears. |
+| 8 | Reload the page while a dialog is open. | No notification. The count appears, and the bell stays on. |
+| 9 | Stop the backend, trigger a dialog, and start the backend again. | No state survives a restart, so no alert until the next event. |
+
 ## Claude Code configuration explorer
 
 Results of the run made when this feature was built are in the table. It used the real configuration, read-only.
