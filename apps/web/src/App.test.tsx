@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { TerminalCloseCode, type ClaudeSessionStatus } from '@ecc/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
-import { FakeWebSocket, installBrowserFakes } from './test/fakes';
+import { FakeNotification, FakeWebSocket, installBrowserFakes } from './test/fakes';
 import { alpha, beta, projects, stats } from './test/fixtures';
 
 vi.mock('@xterm/xterm', async () => ({ Terminal: (await import('./test/fakes')).FakeTerminal }));
@@ -271,6 +271,58 @@ describe('App', () => {
       render(<App />);
       snapshot(await monitorSocket(), [{ ...working, state }]);
       expect((await sessionRow(/alpha/)).getByText(label)).toBeInTheDocument();
+    });
+
+    describe('attention notifications', () => {
+      beforeEach(() => {
+        window.localStorage.clear();
+        FakeNotification.reset();
+        vi.stubGlobal('Notification', FakeNotification);
+        vi.stubGlobal('isSecureContext', true);
+      });
+
+      it('counts sessions needing attention in the page title', async () => {
+        mockApi([alpha]);
+        render(<App />);
+        const socket = await monitorSocket();
+        snapshot(socket, [working]);
+        expect(document.title).toBe('Engineering Control Center');
+        changed(socket, { ...working, state: 'needs_attention' });
+        expect(document.title).toBe('(1) Engineering Control Center');
+      });
+
+      it('turns on from the bell, and a clicked alert opens the session', async () => {
+        const user = userEvent.setup();
+        vi.spyOn(window, 'focus').mockImplementation(() => {});
+        mockApi([alpha]);
+        render(<App />);
+        const socket = await monitorSocket();
+        snapshot(socket, [working]);
+
+        const bell = screen.getByRole('button', { name: 'Attention notifications' });
+        expect(bell).toHaveAttribute('aria-pressed', 'false');
+        await user.click(bell);
+        await waitFor(() => expect(bell).toHaveAttribute('aria-pressed', 'true'));
+
+        // Show the server page, so that the alert has somewhere to bring you from.
+        await user.click(screen.getByRole('button', { name: 'Server' }));
+        changed(socket, { ...working, state: 'needs_attention' });
+        const alert = FakeNotification.instances.at(-1);
+        expect(alert?.title).toBe('alpha needs attention');
+
+        act(() => alert?.onclick?.(new Event('click')));
+        expect(window.location.hash).toBe('#/alpha');
+        expect(await openedSocket()).toBeDefined();
+      });
+
+      it('explains why the bell is unavailable', async () => {
+        vi.stubGlobal('isSecureContext', false);
+        mockApi([alpha]);
+        render(<App />);
+        await screen.findByRole('list', { name: 'Sessions' });
+        expect(screen.getByText('Notifications need HTTPS or localhost.')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Attention notifications' })).toBeDisabled();
+      });
     });
 
     it('shows Unknown before any status arrives, and for sessions without one', async () => {

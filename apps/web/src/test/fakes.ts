@@ -46,6 +46,43 @@ export class FakeWebSocket {
   }
 }
 
+/** Stands in for the browser's Notification API, which jsdom lacks. */
+export class FakeNotification {
+  static permission: NotificationPermission = 'default';
+  /** The answer to the next permission prompt. */
+  static nextPermission: NotificationPermission = 'granted';
+  /** Mimics Android browsers, which grant permission and then throw from the constructor. */
+  static refuse = false;
+  static instances: FakeNotification[] = [];
+  static requestPermission = vi.fn(async () => {
+    FakeNotification.permission = FakeNotification.nextPermission;
+    return FakeNotification.permission;
+  });
+
+  static reset() {
+    FakeNotification.permission = 'default';
+    FakeNotification.nextPermission = 'granted';
+    FakeNotification.refuse = false;
+    FakeNotification.instances = [];
+    FakeNotification.requestPermission.mockClear();
+  }
+
+  closed = false;
+  onclick: ((event: Event) => void) | null = null;
+
+  constructor(
+    readonly title: string,
+    readonly options?: NotificationOptions,
+  ) {
+    if (FakeNotification.refuse) throw new TypeError('Illegal constructor');
+    FakeNotification.instances.push(this);
+  }
+
+  close() {
+    this.closed = true;
+  }
+}
+
 export const terminals: FakeTerminal[] = [];
 
 export class FakeTerminal {
