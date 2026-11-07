@@ -14,7 +14,9 @@
     "test": "pnpm --filter @ecc/shared build && pnpm -r test",
     "lint": "pnpm --filter @ecc/shared build && eslint .",
     "typecheck": "pnpm --filter @ecc/shared build && pnpm -r typecheck",
-    "claude-hooks": "node scripts/claude-hooks.cjs"
+    "claude-hooks": "node scripts/claude-hooks.cjs",
+    "inbox": "node scripts/inbox.cjs",
+    "inbox-mcp": "node scripts/inbox.cjs mcp"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
