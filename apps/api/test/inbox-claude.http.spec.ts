@@ -228,6 +228,13 @@ describe('Engineering Inbox: Claude Code', () => {
       expect((await detail(app, first.itemId)).item.status).toBe('resolved');
     });
 
+    it('record a keyless retry once, so retries cannot fill the event history', async () => {
+      const { body } = await postReport(app, blocker()).expect(202);
+      for (let i = 0; i < 3; i += 1) await postReport(app, blocker()).expect(202);
+      const kinds = (await detail(app, body.itemId)).events.map((event) => event.kind);
+      expect(kinds).toEqual(['agent.reported_again', 'agent.reported']);
+    });
+
     it('stay pending across a restart, since only a person resolves them', async () => {
       await postReport(app, blocker()).expect(202);
       await app.close();

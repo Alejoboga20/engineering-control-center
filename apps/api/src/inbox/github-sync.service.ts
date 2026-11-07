@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { lstatSync, readFileSync } from 'node:fs';
 import {
   BeforeApplicationShutdown,
@@ -34,6 +35,13 @@ const REPORT_LOOKUP_TIMEOUT_MS = 5_000;
 const PENDING_REPORT_TTL_MS = 7 * 24 * 60 * 60_000;
 const TOKEN_PATTERN = /^[A-Za-z0-9_]{20,255}$/;
 const TOKEN_FILE_MAX_BYTES = 1024;
+/** Shown for errors that are not GitHub's; the details go to the log only. */
+const UNEXPECTED_ERROR = 'Unexpected error while syncing.';
+
+/** Event idempotency key of an agent's pull request report. Blocker reports use their own namespace. */
+export function prReportKey(idempotencyKey: string): string {
+  return `agent:pull_request:${idempotencyKey}`;
+}
 
 export function pullRequestKey(repository: string, number: number): string {
   return `github:pr:${repository.toLowerCase()}#${number}`;
@@ -181,7 +189,7 @@ export class GitHubSyncService implements OnApplicationBootstrap, BeforeApplicat
       throw new ApiError(403, 'REPOSITORY_NOT_ALLOWED', `${repository} is not in ECC_GITHUB_REPOS.`);
     }
     const existing = () => this.repository.findByPullRequest(repository, report.number);
-    if (report.idempotencyKey && this.inbox.hasEvent(`agent:${report.idempotencyKey}`)) {
+    if (report.idempotencyKey && this.inbox.hasEvent(prReportKey(report.idempotencyKey))) {
       return { itemId: existing()?.id ?? null, created: false };
     }
     const pending: PendingReport & { idempotencyKey?: string } = {
@@ -290,7 +298,7 @@ export class GitHubSyncService implements OnApplicationBootstrap, BeforeApplicat
           source: 'claude',
           summary: `Reported by an agent${where}.`,
           occurredAt: report.reportedAt,
-          idempotencyKey: report.idempotencyKey ? `agent:${report.idempotencyKey}` : undefined,
+          idempotencyKey: report.idempotencyKey ? prReportKey(report.idempotencyKey) : undefined,
         },
       ],
     };
@@ -344,6 +352,9 @@ export class GitHubSyncService implements OnApplicationBootstrap, BeforeApplicat
         await this.syncRepository(token.token, repository);
       } catch (error) {
         const message = this.describe(error);
+        if (message === UNEXPECTED_ERROR) {
+          this.logger.warn(`GitHub sync of ${repository} failed: ${(error as Error)?.message ?? String(error)}`);
+        }
         firstError ??= `${repository}: ${message}`;
         this.saveState(repository, { lastSyncAt: finishedAt(), lastError: message });
         if (error instanceof GitHubRateLimitError) break;
@@ -401,6 +412,7 @@ export class GitHubSyncService implements OnApplicationBootstrap, BeforeApplicat
           this.applyPullRequest(pr, { allowCreate: report !== undefined, report });
           if (report) this.repository.deletePendingReport(repository, pr.number);
         }
+        for (const number of batch.filter((n) => !found.has(n))) this.notFound(repository, number, reports.get(number));
       });
     }
     this.repository.deletePendingReportsBefore(new Date(Date.now() - PENDING_REPORT_TTL_MS).toISOString());
@@ -424,6 +436,44 @@ export class GitHubSyncService implements OnApplicationBootstrap, BeforeApplicat
     if (this.github.authors.length > 0 && !this.github.authors.includes(author)) return false;
     if (this.github.initialSync === 'open') return true;
     return state.initialSyncDone && pr.createdAt >= baselineAt;
+  }
+
+  /**
+   * GitHub has no pull request with this number: a wrong report, an issue number, or a deleted or
+   * transferred PR. A report of it is dropped. A tracked item keeps its state, because absence is
+   * not a merge or a close, and its history says so once.
+   */
+  private notFound(repository: string, number: number, report: PendingReport | undefined): void {
+    const now = new Date().toISOString();
+    if (report) {
+      this.repository.deletePendingReport(repository, number);
+      this.repository.insertEvent(
+        randomUUID(),
+        {
+          itemId: null,
+          kind: 'pr.report_dropped',
+          source: 'system',
+          summary: `An agent reported ${repository}#${number}, which GitHub does not have. The report was dropped.`,
+          occurredAt: now,
+        },
+        now,
+      );
+    }
+    this.inbox.applySource(pullRequestKey(repository, number), (current) =>
+      current
+        ? {
+            events: [
+              {
+                kind: 'pr.not_found',
+                source: 'system',
+                summary: 'GitHub no longer finds this pull request. Its state is kept; resolve it if it is gone.',
+                occurredAt: now,
+                idempotencyKey: `github:not_found:${repository}#${number}`,
+              },
+            ],
+          }
+        : null,
+    );
   }
 
   private stateOf(repository: string): SyncStateRow {
@@ -463,7 +513,7 @@ export class GitHubSyncService implements OnApplicationBootstrap, BeforeApplicat
   private describe(error: unknown): string {
     this.noteRateLimit(error);
     if (error instanceof GitHubRateLimitError || error instanceof GitHubApiError) return error.message;
-    return 'Unexpected error while syncing.';
+    return UNEXPECTED_ERROR;
   }
 
   /**

@@ -219,7 +219,10 @@ export class GitHubClient {
     if (body.errors?.some((error) => error.type === 'RATE_LIMITED')) {
       throw new GitHubRateLimitError(limitedUntil ?? new Date(Date.now() + DEFAULT_BACKOFF_MS));
     }
-    if (body.errors?.length || !body.data) {
+    // A lookup by number that matches nothing comes back as a null alias plus a NOT_FOUND error.
+    // That is an answer, not a failure: the caller sees the alias as absent.
+    const onlyNotFound = body.errors?.every((error) => error.type === 'NOT_FOUND') ?? true;
+    if (!body.data || !onlyNotFound) {
       const message = body.errors?.[0]?.message ?? 'no data';
       throw new GitHubApiError(`GitHub query failed: ${clipped(message)}`);
     }
