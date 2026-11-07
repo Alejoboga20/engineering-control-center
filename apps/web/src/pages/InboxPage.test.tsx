@@ -408,6 +408,69 @@ describe('Inbox page', () => {
     });
   });
 
+  describe('narrow layout', () => {
+    function stubMedia(matching: string[]) {
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn((query: string) => ({ matches: matching.includes(query), media: query })),
+      );
+    }
+
+    function spyScroll() {
+      const scrolled: { element: Element; options: unknown }[] = [];
+      // jsdom has no layout, so no scrollIntoView either.
+      HTMLElement.prototype.scrollIntoView = function (this: Element, options?: boolean | ScrollIntoViewOptions) {
+        scrolled.push({ element: this, options });
+      };
+      return scrolled;
+    }
+
+    afterEach(() => {
+      delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView;
+    });
+
+    const STACKED = '(max-width: 767.98px)';
+    const REDUCED = '(prefers-reduced-motion: reduce)';
+
+    it('brings the details into view when stacked, and goes back to the item', async () => {
+      stubMedia([STACKED]);
+      const scrolled = spyScroll();
+      listed = [item('a'), item('b', { lastActivityAt: hoursAgo(2) })];
+      mockApi();
+      await openInbox();
+      const details = await select('Item b');
+      await waitFor(() => expect(scrolled).toHaveLength(1));
+      expect(scrolled[0].element).toBe(screen.getByRole('region', { name: 'Item details' }));
+      expect(scrolled[0].options).toEqual({ behavior: 'smooth', block: 'start' });
+
+      await userEvent.click(details.getByRole('button', { name: 'Back to list' }));
+      expect(scrolled).toHaveLength(2);
+      expect(scrolled[1].element).toBe(await row('Item b'));
+    });
+
+    it('jumps without animation when reduced motion is preferred', async () => {
+      stubMedia([STACKED, REDUCED]);
+      const scrolled = spyScroll();
+      listed = [item('a')];
+      mockApi();
+      await openInbox();
+      await select('Item a');
+      await waitFor(() => expect(scrolled).toHaveLength(1));
+      expect(scrolled[0].options).toEqual({ behavior: 'auto', block: 'start' });
+    });
+
+    it('does not scroll side by side', async () => {
+      stubMedia([]);
+      const scrolled = spyScroll();
+      listed = [item('a')];
+      mockApi();
+      await openInbox();
+      await select('Item a');
+      await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+      expect(scrolled).toHaveLength(0);
+    });
+  });
+
   describe('actions', () => {
     it('acknowledges optimistically, then applies the server reply', async () => {
       listed = [item('a')];
