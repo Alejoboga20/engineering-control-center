@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { isValidSessionName, type CreateSessionRequest } from '@ecc/shared';
 import { AppLayout } from './components/AppLayout';
 import { CreateSessionDialog } from './components/CreateSessionDialog';
@@ -6,10 +6,12 @@ import { Sidebar, type View } from './components/Sidebar';
 import { TerminateSessionDialog } from './components/TerminateSessionDialog';
 import { useAttentionNotifications } from './hooks/useAttentionNotifications';
 import { useClaudeStatus } from './hooks/useClaudeStatus';
+import { useInbox } from './hooks/useInbox';
 import { useSessions } from './hooks/useSessions';
 import { useSystemStats } from './hooks/useSystemStats';
 import { DashboardPage } from './pages/DashboardPage';
 import { ConfigurationPage } from './pages/ConfigurationPage';
+import { InboxPage } from './pages/InboxPage';
 import { ServerPage } from './pages/ServerPage';
 
 function sessionFromHash(): string | null {
@@ -21,6 +23,7 @@ export function App() {
   const sessions = useSessions();
   const system = useSystemStats();
   const monitor = useClaudeStatus();
+  const inbox = useInbox();
   const [view, setView] = useState<View>('sessions');
   const [selected, setSelected] = useState<string | null>(sessionFromHash);
   const [creating, setCreating] = useState(false);
@@ -32,6 +35,12 @@ export function App() {
     // replaceState, so that switching terminals does not fill the browser history.
     window.history.replaceState(null, '', name ? `#/${encodeURIComponent(name)}` : '#/');
   }, []);
+
+  const runningSessions = useMemo(
+    () => new Set((sessions.sessions ?? []).map((session) => session.name)),
+    [sessions.sessions],
+  );
+  const inboxAttention = inbox.summary?.needsAttention ?? 0;
 
   const notifications = useAttentionNotifications({
     monitor,
@@ -61,6 +70,7 @@ export function App() {
           error={sessions.error}
           selected={selected}
           view={view}
+          inboxAttention={inboxAttention}
           monitor={monitor}
           notifications={notifications}
           onSelect={select}
@@ -73,6 +83,8 @@ export function App() {
         <ServerPage system={system} />
       ) : view === 'configuration' ? (
         <ConfigurationPage />
+      ) : view === 'inbox' ? (
+        <InboxPage inbox={inbox} runningSessions={runningSessions} onOpenTerminal={select} />
       ) : (
         <DashboardPage
           selected={selected}
