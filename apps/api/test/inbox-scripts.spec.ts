@@ -194,6 +194,17 @@ describe('Inbox MCP server', () => {
     expect(response.result).toMatchObject({ isError: true, content: [{ text: expect.stringMatching(/credentials/) }] });
   });
 
+  it('never answers or acts on a notification, whatever its method', async () => {
+    startMcp();
+    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'tools/list' })}\n`);
+    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'tools/call', params: { name: 'report_blocker', arguments: { title: 'x' } } })}\n`);
+    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: null, method: 'ping' })}\n`);
+    const lines = await rpc({ jsonrpc: '2.0', id: 5, method: 'ping' });
+    await new Promise((done) => setTimeout(done, 300));
+    expect([...lines, ...stdout.split('\n').filter(Boolean)]).toEqual([{ jsonrpc: '2.0', id: 5, result: {} }]);
+    expect(received).toEqual([]);
+  });
+
   it('answers a call in flight before exiting when stdin closes', async () => {
     startMcp();
     const exited = new Promise<number | null>((done) => child.on('close', done));

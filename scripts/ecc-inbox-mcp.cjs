@@ -216,7 +216,9 @@ async function handle(message) {
     return;
   }
   const { id, method, params } = message;
-  const isNotification = id === undefined || id === null;
+  // A notification gets no response, ever. Nothing it asks for is done either: a report that
+  // could not be acknowledged would be a silent side effect.
+  if (id === undefined || id === null) return;
   switch (method) {
     case 'initialize': {
       const requested = params && params.protocolVersion;
@@ -228,7 +230,7 @@ async function handle(message) {
       return;
     }
     case 'ping':
-      if (!isNotification) reply(id, {});
+      reply(id, {});
       return;
     case 'tools/list':
       reply(id, { tools: TOOLS });
@@ -237,7 +239,7 @@ async function handle(message) {
       reply(id, await callTool(params));
       return;
     default:
-      if (!isNotification) fail(id, -32601, `Method not found: ${method.slice(0, 64)}`);
+      fail(id, -32601, `Method not found: ${method.slice(0, 64)}`);
   }
 }
 
