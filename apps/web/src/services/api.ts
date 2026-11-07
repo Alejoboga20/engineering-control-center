@@ -7,9 +7,16 @@ import type {
   ClaudeResourceListResponse,
   ClaudeSettingsResponse,
   CreateSessionRequest,
+  GitHubSyncStatus,
+  InboxItem,
+  InboxItemDetail,
+  InboxListQuery,
+  InboxListResponse,
+  InboxSummary,
   ProjectsResponse,
   SessionDto,
   SystemStatsDto,
+  UpdateInboxItemRequest,
 } from '@ecc/shared';
 
 export class ApiRequestError extends Error {
@@ -56,6 +63,19 @@ function configQuery({ scope, project }: ClaudeConfigSelection): string {
   return `?${params.toString()}`;
 }
 
+function inboxQuery(query: InboxListQuery): string {
+  const params = new URLSearchParams();
+  if (query.filter) params.set('filter', query.filter);
+  if (query.priority) params.set('priority', query.priority);
+  if (query.status) params.set('status', query.status);
+  const search = params.toString();
+  return search ? `?${search}` : '';
+}
+
+export type InboxTransition = 'acknowledge' | 'resolve' | 'reopen';
+
+const inboxItemPath = (id: string) => `/inbox/${encodeURIComponent(id)}`;
+
 export const api = {
   listSessions: () => request<SessionDto[]>('/sessions'),
   createSession: (body: CreateSessionRequest) =>
@@ -77,4 +97,16 @@ export const api = {
     request<ClaudeHooksResponse>(`/claude/config/hooks${configQuery(selection)}`),
   getClaudeSettings: (selection: ClaudeConfigSelection) =>
     request<ClaudeSettingsResponse>(`/claude/config/settings${configQuery(selection)}`),
+  listInbox: (query: InboxListQuery) => request<InboxListResponse>(`/inbox${inboxQuery(query)}`),
+  getInboxSummary: () => request<InboxSummary>('/inbox/summary'),
+  getInboxItem: (id: string) => request<InboxItemDetail>(inboxItemPath(id)),
+  updateInboxItem: (id: string, body: UpdateInboxItemRequest) =>
+    request<InboxItem>(inboxItemPath(id), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  transitionInboxItem: (id: string, transition: InboxTransition) =>
+    request<InboxItem>(`${inboxItemPath(id)}/${transition}`, { method: 'POST' }),
+  syncGitHub: () => request<GitHubSyncStatus>('/inbox/sync/github', { method: 'POST' }),
 };
