@@ -48,6 +48,15 @@ async function backup(destination, log) {
     db.close();
   }
   chmodSync(target, 0o600);
+  // The copy inherits WAL mode, and a WAL database cannot be opened read-only without its -shm
+  // file. Rollback journal mode makes the backup one standalone file.
+  const Database = require(require.resolve('better-sqlite3', { paths: [path.join(__dirname, '../apps/api')] }));
+  const copy = new Database(target, { fileMustExist: true });
+  try {
+    copy.pragma('journal_mode = DELETE');
+  } finally {
+    copy.close();
+  }
   log(`Backed up ${source} to ${target}`);
 }
 

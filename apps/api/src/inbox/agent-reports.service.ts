@@ -38,7 +38,7 @@ export class AgentReportsService {
 
       if (report.idempotencyKey) {
         const sourceKey = `agent:report:${report.idempotencyKey}`;
-        const eventKey = `agent:${report.idempotencyKey}`;
+        const eventKey = `agent:human_input:${report.idempotencyKey}`;
         if (this.inbox.hasEvent(eventKey)) {
           return { itemId: this.inbox.findByKey(sourceKey)?.id ?? null, created: false };
         }

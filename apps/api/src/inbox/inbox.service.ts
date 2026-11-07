@@ -285,9 +285,10 @@ export class InboxService {
   private update(
     current: StoredItem,
     update: SourceUpdate,
-    events: SourceEvent[],
+    incoming: SourceEvent[],
     now: string,
   ): ApplyResult {
+    const events = this.withoutRepeats(current.id, incoming);
     const next: StoredItem = {
       ...current,
       pullRequest: current.pullRequest ? { ...current.pullRequest } : null,
@@ -358,6 +359,19 @@ export class InboxService {
         data: toPublic(next),
       });
       return toPublic(next);
+    });
+  }
+
+  /**
+   * Drops an event without an idempotency key that only repeats the item's latest event, such as
+   * the same agent report retried, so retries cannot crowd real history out of the bounded trail.
+   */
+  private withoutRepeats(itemId: string, events: SourceEvent[]): SourceEvent[] {
+    let last = this.repository.latestEvent(itemId);
+    return events.filter((event) => {
+      const repeat = !event.idempotencyKey && last?.kind === event.kind && last.summary === event.summary;
+      if (!repeat) last = { kind: event.kind, summary: event.summary };
+      return !repeat;
     });
   }
 

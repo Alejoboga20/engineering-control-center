@@ -70,7 +70,7 @@ binaries for Linux and macOS. Node's built-in `node:sqlite` is still experimenta
 | `priority`, `suggested_priority`, `priority_overridden` | Effective priority, what the rules suggest, and whether a person overrode it |
 | `status` | `open`, `acknowledged`, `resolved` |
 | `source` | `github`, `claude` (`manual` is reserved) |
-| `source_state` | `open`, `merged`, `closed` for PRs; `pending`, `cleared`, `uncertain` for Claude items |
+| `source_state` | `open`, `merged`, `closed` for PRs; `pending`, `cleared`, `uncertain` for hook-raised Claude items; always `pending` for agent-reported blockers |
 | `source_session`, `source_agent` | tmux session and Claude session ID, when known |
 | `pr_repository`, `pr_number`, `pr_url`, `pr_author`, `pr_draft`, `pr_review_state`, `pr_checks_state`, `pr_attribution` | Pull request metadata. `UNIQUE (pr_repository, pr_number)`. |
 | `revision` | Increases on every change |
@@ -103,7 +103,7 @@ session, agent, time). Forgotten after 7 days.
 | Agent report without a key | `agent:report:<tmux session or unknown>:<sha256 of the normalized title>`, suffixed `:<n>` when earlier items with that title are resolved |
 
 Hook events are also recorded with the idempotency key `hook:<eventId>:<kind>`, so a redelivered event changes
-nothing, even after a restart.
+nothing, even after a restart. Agent reports use `agent:human_input:<key>` and `agent:pull_request:<key>`.
 
 ## Rules
 
@@ -162,6 +162,11 @@ signals that end Needs Attention in [monitoring](claude-monitoring.md):
 
 An event older than the item's last activity changes nothing but the audit trail.
 
+After a backend restart the monitor no longer knows which tool asked, so the completion of a tool does **not**
+clear an `uncertain` permission item; only `UserPromptSubmit`, `Stop`, `StopFailure`, `SessionEnd` or a new
+`SessionStart` do. This errs on the safe side: an item is never resolved on a signal that might belong to another
+prompt.
+
 Without a reliable signal, the item becomes **`uncertain`**, and is never resolved automatically:
 
 - on backend start, every Claude item still `pending` (the in-memory monitor state is gone);
@@ -172,7 +177,8 @@ Without a reliable signal, the item becomes **`uncertain`**, and is never resolv
 Items survive their session. **Denying a permission sends no hook** (verified in V2), so after a denial the item
 stays `pending` until the next prompt clears it; the UI says so.
 
-Agent reports are not cleared by hooks and never become uncertain: an explicit blocker stays until a person
+Agent-reported blockers also have `source_state` `pending`, but they are not cleared by hooks and never become
+uncertain: an explicit blocker stays until a person
 resolves it.
 
 ### Listing
@@ -263,6 +269,13 @@ repository:
    never listed wholesale.
 3. Look up unconfirmed agent reports the same way.
 
+A lookup that matches nothing (GitHub answers a null field with a `NOT_FOUND` error) is an answer, not a failure,
+and does not fail the sync. An agent report of such a number (a typo, an issue number) is dropped, with a
+`pr.report_dropped` event. A tracked item whose pull request GitHub no longer finds (deleted or transferred) keeps
+its state, gets one `pr.not_found` event, and is never resolved automatically; resolve it yourself if it is gone.
+Errors that are not GitHub's are shown as "Unexpected error while syncing." and logged with their message (never
+the token).
+
 GitHub is the source of truth. A failed sync records its error per repository and globally, and **never deletes or
 resolves anything**. A repository removed from `ECC_GITHUB_REPOS` stops syncing; its items stay.
 
@@ -283,7 +296,9 @@ or updated, linked to the reporting session and marked `agent_reported`, and the
 ## Agent reporting
 
 Agents report through a local MCP server, `scripts/ecc-inbox-mcp.cjs`: dependency-free, stdio, newline-delimited
-JSON-RPC 2.0 (`initialize`, `notifications/initialized`, `tools/list`, `tools/call`, `ping`). It offers two tools:
+JSON-RPC 2.0 (`initialize`, `notifications/initialized`, `tools/list`, `tools/call`, `ping`). A message without
+an `id` is a notification: it is never answered, and a tool call sent that way is not carried out. It offers two
+tools:
 
 | Tool | Arguments |
 | --- | --- |
@@ -325,8 +340,10 @@ requires `repository` and `pullRequestNumber` and refuses the others. Agents can
 approve, merge or change priorities.
 
 Idempotency: with `idempotencyKey`, the key is the report, and any retry returns the same item with
-`created: false`. Without it, the same normalized title from the same session updates the matching item as long as
-it is not resolved; once it is, the same title opens a new item.
+`created: false`. Keys are namespaced by report type, so a blocker and a pull request report may reuse one key.
+Without a key, the same normalized title from the same session updates the matching item as long as it is not
+resolved; once it is, the same title opens a new item. A retry without a key records no new event when the item's
+latest event already says the same, so retries cannot push real history out of the 200-event limit.
 
 ## Security
 
@@ -355,7 +372,8 @@ The database is one file. While the dashboard runs, copy it with SQLite's online
 pnpm inbox backup ~/backups/inbox-$(date +%F).sqlite3
 ```
 
-This uses better-sqlite3's backup API, so it works without the `sqlite3` command. With the CLI installed, this is
+This uses better-sqlite3's backup API, so it works without the `sqlite3` command. The copy is switched out of WAL
+mode, so it is one standalone file that opens read-only, for example with `sqlite3 -readonly`. With the CLI installed, this is
 equivalent:
 
 ```bash

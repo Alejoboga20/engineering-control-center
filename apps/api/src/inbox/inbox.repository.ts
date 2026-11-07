@@ -358,6 +358,14 @@ export class InboxRepository {
       .all(itemId, limit) as InboxEvent[];
   }
 
+  latestEvent(itemId: string): { kind: string; summary: string } | null {
+    return (
+      (this.db
+        .prepare('SELECT kind, summary FROM inbox_events WHERE item_id = ? ORDER BY rowid DESC LIMIT 1')
+        .get(itemId) as { kind: string; summary: string } | undefined) ?? null
+    );
+  }
+
   syncStates(): SyncStateRow[] {
     return (
       this.db.prepare('SELECT * FROM github_sync_state ORDER BY repository').all() as {

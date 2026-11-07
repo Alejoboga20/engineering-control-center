@@ -1,6 +1,7 @@
 import { chmodSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Logger } from '@nestjs/common';
 import type { GitHubConfig } from '../src/config/app-config';
 import { GitHubSyncService } from '../src/inbox/github-sync.service';
 import { connect, TestClient } from './helpers';
@@ -32,7 +33,14 @@ class FakeGitHub {
     this.calls.push({ query, variables, authorization: (init.headers as Record<string, string>).Authorization });
     const failure = this.failures.shift();
     if (failure) return failure;
-    return Response.json({ data: { rateLimit: { remaining: 4999, resetAt: new Date().toISOString() }, ...this.answer(query, variables) } });
+    const data = this.answer(query, variables);
+    // As GitHub does: a lookup that matches nothing is a null alias plus a NOT_FOUND error.
+    const missing = Object.entries((data.repository ?? {}) as Record<string, unknown>).filter(([, v]) => v === null);
+    const errors = missing.map(([alias]) => ({ type: 'NOT_FOUND', path: ['repository', alias], message: 'Could not resolve to a PullRequest.' }));
+    return Response.json({
+      data: { rateLimit: { remaining: 4999, resetAt: new Date().toISOString() }, ...data },
+      ...(errors.length > 0 ? { errors } : {}),
+    });
   });
 
   set(pr: FakePr): void {
@@ -54,7 +62,7 @@ class FakeGitHub {
     };
   }
 
-  private answer(query: string, variables: Record<string, unknown>) {
+  private answer(query: string, variables: Record<string, unknown>): { repository: Record<string, unknown> } {
     if (query.includes('OpenPullRequests')) {
       const open = [...this.prs.values()]
         .filter((pr) => (pr.state ?? 'OPEN') === 'OPEN')
@@ -312,7 +320,45 @@ describe('Engineering Inbox: GitHub', () => {
     });
   });
 
+  describe('pull requests GitHub does not find', () => {
+    it('keep a tracked item, note it once, and still reconcile the rest of the batch', async () => {
+      gh.set({ number: 7 });
+      gh.set({ number: 8 });
+      await syncNow();
+      gh.prs.delete(7);
+      gh.set({ number: 8, state: 'MERGED' });
+      await syncNow();
+      await syncNow();
+      expect((await summary()).github.lastError).toBeNull();
+      expect(await prItem(8)).toMatchObject({ resolution: 'auto_merged' });
+      const item = await prItem(7);
+      expect(item).toMatchObject({ status: 'open', sourceState: 'open' });
+      const kinds = (await detail(app, item?.id as string)).events.map((event) => event.kind);
+      expect(kinds.filter((kind) => kind === 'pr.not_found')).toHaveLength(1);
+    });
+
+    it('drop an agent report of a number GitHub does not have', async () => {
+      await postReport(app, { type: 'pull_request', repository: REPO, pullRequestNumber: 9 }).expect(202);
+      await syncNow();
+      expect((await summary()).github.lastError).toBeNull();
+      gh.set({ number: 9 });
+      await syncNow();
+      expect(await prItem(9)).toMatchObject({ pullRequest: expect.objectContaining({ attribution: 'discovered' }) });
+    });
+  });
+
   describe('failures', () => {
+    it('logs an unexpected error for the repository, and shows only a safe message', async () => {
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      gh.fetch.mockImplementationOnce(async () => Response.json({ data: { repository: { pullRequests: null } } }));
+      await syncNow();
+      expect((await summary()).github.lastError).toBe('acme/api: Unexpected error while syncing.');
+      const logged = warn.mock.calls.map((args) => String(args[0]));
+      expect(logged).toEqual(expect.arrayContaining([expect.stringMatching(/^GitHub sync of acme\/api failed: .+/)]));
+      expect(logged.join('\n')).not.toContain(TOKEN);
+      warn.mockRestore();
+    });
+
     it('backs off on a rate limit, and keeps every item', async () => {
       gh.set({ number: 7 });
       await syncNow();
@@ -437,6 +483,21 @@ describe('Engineering Inbox: GitHub', () => {
         sourceSession: 'payroll',
         pullRequest: expect.objectContaining({ attribution: 'agent_reported' }),
       });
+    });
+
+    it('record a keyless retry once, not once per retry', async () => {
+      gh.set({ number: 7 });
+      for (let i = 0; i < 3; i += 1) await reportPr().expect(202);
+      const item = await prItem(7);
+      const kinds = (await detail(app, item?.id as string)).events.map((event) => event.kind);
+      expect(kinds.filter((kind) => kind === 'pr.reported_by_agent')).toHaveLength(1);
+    });
+
+    it('keep their idempotency keys apart from blocker reports', async () => {
+      gh.set({ number: 7 });
+      await reportPr({ idempotencyKey: 'shared-key-1' }).expect(202);
+      const { body } = await postReport(app, { type: 'human_input', title: 'Blocked', idempotencyKey: 'shared-key-1' }).expect(202);
+      expect(body).toEqual({ itemId: expect.any(String), created: true });
     });
 
     it('refuse a repository outside the allowlist', async () => {
