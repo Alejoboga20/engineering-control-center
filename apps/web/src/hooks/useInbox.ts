@@ -65,6 +65,22 @@ function placeItem(items: InboxItem[], item: InboxItem, query: InboxListQuery): 
   return next.sort(compareInboxItems);
 }
 
+/**
+ * Undoes only the fields this action changed and nothing changed since, so that another optimistic
+ * change made to the same item meanwhile survives.
+ */
+function rollBack(items: InboxItem[], before: InboxItem, optimistic: InboxItem): InboxItem {
+  const current = items.find((candidate) => candidate.id === before.id);
+  // Gone from the list: nothing else could have been changed on it, since it was not selectable.
+  if (!current) return before;
+  const restored: Record<string, unknown> = { ...current };
+  for (const key of Object.keys(optimistic) as (keyof InboxItem)[]) {
+    const isOwnChange = optimistic[key] !== before[key] && current[key] === optimistic[key];
+    if (isOwnChange) restored[key] = before[key];
+  }
+  return restored as unknown as InboxItem;
+}
+
 function optimisticTransition(item: InboxItem, transition: InboxTransition): InboxItem {
   const now = new Date().toISOString();
   switch (transition) {
@@ -244,7 +260,7 @@ export function useInbox(): InboxControl {
         // revision this action started from.
         const isUnchangedSinceAction = revisions.current.get(item.id) === item.revision;
         if (isUnchangedSinceAction) {
-          setItems((current) => current && placeItem(current, item, queryRef.current));
+          setItems((current) => current && placeItem(current, rollBack(current, item, optimistic), queryRef.current));
         }
         if (mounted.current) setActionError(`Could not ${verb} "${item.title}": ${messageOf(cause)}`);
       }

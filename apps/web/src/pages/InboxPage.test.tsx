@@ -501,6 +501,32 @@ describe('Inbox page', () => {
       ]);
     });
 
+    it('rolls back only what a failed action changed', async () => {
+      listed = [item('a')];
+      const priorityReply = deferred<Reply>();
+      const acknowledgeReply = deferred<Reply>();
+      route = (url, init) =>
+        init?.method === 'PATCH'
+          ? priorityReply.promise
+          : init?.method === 'POST' && url === '/api/inbox/a/acknowledge'
+            ? acknowledgeReply.promise
+            : undefined;
+      mockApi();
+      await openInbox();
+      const details = await select('Item a');
+      await userEvent.selectOptions(details.getByRole('combobox', { name: 'Priority' }), 'P1');
+      await userEvent.click(details.getByRole('button', { name: 'Acknowledge' }));
+      expect(within(await row('Item a')).getByText('Acknowledged')).toBeInTheDocument();
+
+      act(() => priorityReply.resolve({ status: 500, body: { message: 'Boom.' } }));
+      expect(await screen.findByRole('alert')).toHaveTextContent('Could not change the priority');
+      expect(within(await row('Item a')).getByText('P2')).toBeInTheDocument();
+      expect(within(await row('Item a')).getByText('Acknowledged')).toBeInTheDocument();
+
+      act(() => acknowledgeReply.resolve({ status: 200, body: item('a', { status: 'acknowledged', revision: 2 }) }));
+      expect(within(await row('Item a')).getByText('Acknowledged')).toBeInTheDocument();
+    });
+
     it('rolls back a refused priority change', async () => {
       listed = [item('a')];
       route = (_url, init) =>
