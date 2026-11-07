@@ -190,20 +190,20 @@ describe('Inbox page', () => {
   });
 
   describe('rendering', () => {
-    it('loads after the hello, and shows what each item is about', async () => {
+    it('loads, and shows what each item is about', async () => {
       listed = [
         pullRequestItem('pr', {
           pullRequest: { ...pullRequestItem('x').pullRequest!, draft: true, checksState: 'failing' },
         }),
         item('perm', { type: 'permission_request', title: 'Allow Bash?', sourceState: 'uncertain' }),
       ];
+      const firstList = deferred<Reply>();
+      route = (url) => (url === '/api/inbox?filter=all' ? firstList.promise : undefined);
       const fetchMock = mockApi();
       render(<App />);
       await userEvent.click(screen.getByRole('button', { name: /^Inbox/ }));
       expect(screen.getByText('Loading the inbox…')).toBeInTheDocument();
-      expect(calls(fetchMock).some(({ url }) => url.startsWith('/api/inbox'))).toBe(false);
-
-      send(await inboxSocket(), { type: 'inbox.hello', data: { serverTime: '' } });
+      act(() => firstList.resolve({ status: 200, body: { items: [...listed] } }));
       const pr = within(await row('Pull request pr'));
       expect(pr.getByText('P2')).toBeInTheDocument();
       expect(pr.getByText('Pull request')).toBeInTheDocument();
@@ -221,6 +221,18 @@ describe('Inbox page', () => {
       expect(calls(fetchMock).map(({ url }) => url)).toEqual(
         expect.arrayContaining(['/api/inbox?filter=all', '/api/inbox/summary']),
       );
+    });
+
+    it('loads over REST even when the live connection never opens', async () => {
+      listed = [item('a')];
+      summary = summaryOf({ needsAttention: 3 });
+      mockApi();
+      render(<App />);
+      await userEvent.click(screen.getByRole('button', { name: /^Inbox/ }));
+      act(() => FakeWebSocket.inboxes[0]?.serverClose(1006));
+      expect(await row('Item a')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Inbox 3 open P1' })).toBeInTheDocument();
+      expect(screen.getByText('Live updates disconnected. Reconnecting…')).toBeInTheDocument();
     });
 
     it('shows the open P1 count on the navigation tab', async () => {
@@ -579,7 +591,7 @@ describe('Inbox page', () => {
       const first = await openInbox();
       await row('Item a');
       const listCalls = () => calls(fetchMock).filter(({ url }) => url.startsWith('/api/inbox?')).length;
-      expect(listCalls()).toBe(1);
+      expect(listCalls()).toBe(2);
 
       act(() => first.serverClose(1006));
       expect(await screen.findByText('Live updates disconnected. Reconnecting…')).toBeInTheDocument();
@@ -590,7 +602,7 @@ describe('Inbox page', () => {
       send(second, { type: 'inbox.hello', data: { serverTime: '' } });
       expect(await row('Missed while away')).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /Item a/ })).not.toBeInTheDocument();
-      expect(listCalls()).toBe(2);
+      expect(listCalls()).toBe(3);
       expect(screen.queryByText(/Reconnecting/)).not.toBeInTheDocument();
     });
 

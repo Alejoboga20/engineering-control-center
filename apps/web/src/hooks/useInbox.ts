@@ -106,7 +106,6 @@ export function useInbox(): InboxControl {
   /** Items received while a list request is in flight, which may be newer than its reply. */
   const receivedDuringLoad = useRef<Map<string, InboxItem> | null>(null);
   const listRequest = useRef(0);
-  const helloSeen = useRef(false);
   const summaryTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const mounted = useRef(true);
 
@@ -183,7 +182,6 @@ export function useInbox(): InboxControl {
         switch (message.type) {
           case 'inbox.hello':
             attempts = 0;
-            helloSeen.current = true;
             setConnected(true);
             void loadList(queryRef.current);
             void loadSummary();
@@ -206,7 +204,13 @@ export function useInbox(): InboxControl {
     }
 
     // Deferred so that React StrictMode's first, immediately discarded mount opens no socket.
-    timer = setTimeout(connect, 0);
+    // The first load does not wait for the socket, so the Inbox works over REST even where the
+    // socket cannot open (a proxy without upgrades, a rejected Origin).
+    timer = setTimeout(() => {
+      void loadList(queryRef.current);
+      void loadSummary();
+      connect();
+    }, 0);
 
     return () => {
       disposed = true;
@@ -221,8 +225,7 @@ export function useInbox(): InboxControl {
     (next: InboxListQuery) => {
       queryRef.current = next;
       setQueryState(next);
-      // Before the first hello, the hello itself loads the list with this query.
-      if (helloSeen.current) void loadList(next);
+      void loadList(next);
     },
     [loadList],
   );
