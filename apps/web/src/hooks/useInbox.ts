@@ -65,6 +65,22 @@ function placeItem(items: InboxItem[], item: InboxItem, query: InboxListQuery): 
   return next.sort(compareInboxItems);
 }
 
+/**
+ * Undoes only the fields this action changed and nothing changed since, so that another optimistic
+ * change made to the same item meanwhile survives.
+ */
+function rollBack(items: InboxItem[], before: InboxItem, optimistic: InboxItem): InboxItem {
+  const current = items.find((candidate) => candidate.id === before.id);
+  // Gone from the list: nothing else could have been changed on it, since it was not selectable.
+  if (!current) return before;
+  const restored: Record<string, unknown> = { ...current };
+  for (const key of Object.keys(optimistic) as (keyof InboxItem)[]) {
+    const isOwnChange = optimistic[key] !== before[key] && current[key] === optimistic[key];
+    if (isOwnChange) restored[key] = before[key];
+  }
+  return restored as unknown as InboxItem;
+}
+
 function optimisticTransition(item: InboxItem, transition: InboxTransition): InboxItem {
   const now = new Date().toISOString();
   switch (transition) {
@@ -106,7 +122,6 @@ export function useInbox(): InboxControl {
   /** Items received while a list request is in flight, which may be newer than its reply. */
   const receivedDuringLoad = useRef<Map<string, InboxItem> | null>(null);
   const listRequest = useRef(0);
-  const helloSeen = useRef(false);
   const summaryTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const mounted = useRef(true);
 
@@ -183,7 +198,6 @@ export function useInbox(): InboxControl {
         switch (message.type) {
           case 'inbox.hello':
             attempts = 0;
-            helloSeen.current = true;
             setConnected(true);
             void loadList(queryRef.current);
             void loadSummary();
@@ -206,7 +220,13 @@ export function useInbox(): InboxControl {
     }
 
     // Deferred so that React StrictMode's first, immediately discarded mount opens no socket.
-    timer = setTimeout(connect, 0);
+    // The first load does not wait for the socket, so the Inbox works over REST even where the
+    // socket cannot open (a proxy without upgrades, a rejected Origin).
+    timer = setTimeout(() => {
+      void loadList(queryRef.current);
+      void loadSummary();
+      connect();
+    }, 0);
 
     return () => {
       disposed = true;
@@ -221,8 +241,7 @@ export function useInbox(): InboxControl {
     (next: InboxListQuery) => {
       queryRef.current = next;
       setQueryState(next);
-      // Before the first hello, the hello itself loads the list with this query.
-      if (helloSeen.current) void loadList(next);
+      void loadList(next);
     },
     [loadList],
   );
@@ -241,7 +260,7 @@ export function useInbox(): InboxControl {
         // revision this action started from.
         const isUnchangedSinceAction = revisions.current.get(item.id) === item.revision;
         if (isUnchangedSinceAction) {
-          setItems((current) => current && placeItem(current, item, queryRef.current));
+          setItems((current) => current && placeItem(current, rollBack(current, item, optimistic), queryRef.current));
         }
         if (mounted.current) setActionError(`Could not ${verb} "${item.title}": ${messageOf(cause)}`);
       }

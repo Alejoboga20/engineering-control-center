@@ -190,20 +190,20 @@ describe('Inbox page', () => {
   });
 
   describe('rendering', () => {
-    it('loads after the hello, and shows what each item is about', async () => {
+    it('loads, and shows what each item is about', async () => {
       listed = [
         pullRequestItem('pr', {
           pullRequest: { ...pullRequestItem('x').pullRequest!, draft: true, checksState: 'failing' },
         }),
         item('perm', { type: 'permission_request', title: 'Allow Bash?', sourceState: 'uncertain' }),
       ];
+      const firstList = deferred<Reply>();
+      route = (url) => (url === '/api/inbox?filter=all' ? firstList.promise : undefined);
       const fetchMock = mockApi();
       render(<App />);
       await userEvent.click(screen.getByRole('button', { name: /^Inbox/ }));
       expect(screen.getByText('Loading the inbox…')).toBeInTheDocument();
-      expect(calls(fetchMock).some(({ url }) => url.startsWith('/api/inbox'))).toBe(false);
-
-      send(await inboxSocket(), { type: 'inbox.hello', data: { serverTime: '' } });
+      act(() => firstList.resolve({ status: 200, body: { items: [...listed] } }));
       const pr = within(await row('Pull request pr'));
       expect(pr.getByText('P2')).toBeInTheDocument();
       expect(pr.getByText('Pull request')).toBeInTheDocument();
@@ -221,6 +221,18 @@ describe('Inbox page', () => {
       expect(calls(fetchMock).map(({ url }) => url)).toEqual(
         expect.arrayContaining(['/api/inbox?filter=all', '/api/inbox/summary']),
       );
+    });
+
+    it('loads over REST even when the live connection never opens', async () => {
+      listed = [item('a')];
+      summary = summaryOf({ needsAttention: 3 });
+      mockApi();
+      render(<App />);
+      await userEvent.click(screen.getByRole('button', { name: /^Inbox/ }));
+      act(() => FakeWebSocket.inboxes[0]?.serverClose(1006));
+      expect(await row('Item a')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Inbox 3 open P1' })).toBeInTheDocument();
+      expect(screen.getByText('Live updates disconnected. Reconnecting…')).toBeInTheDocument();
     });
 
     it('shows the open P1 count on the navigation tab', async () => {
@@ -396,6 +408,69 @@ describe('Inbox page', () => {
     });
   });
 
+  describe('narrow layout', () => {
+    function stubMedia(matching: string[]) {
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn((query: string) => ({ matches: matching.includes(query), media: query })),
+      );
+    }
+
+    function spyScroll() {
+      const scrolled: { element: Element; options: unknown }[] = [];
+      // jsdom has no layout, so no scrollIntoView either.
+      HTMLElement.prototype.scrollIntoView = function (this: Element, options?: boolean | ScrollIntoViewOptions) {
+        scrolled.push({ element: this, options });
+      };
+      return scrolled;
+    }
+
+    afterEach(() => {
+      delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView;
+    });
+
+    const STACKED = '(max-width: 767.98px)';
+    const REDUCED = '(prefers-reduced-motion: reduce)';
+
+    it('brings the details into view when stacked, and goes back to the item', async () => {
+      stubMedia([STACKED]);
+      const scrolled = spyScroll();
+      listed = [item('a'), item('b', { lastActivityAt: hoursAgo(2) })];
+      mockApi();
+      await openInbox();
+      const details = await select('Item b');
+      await waitFor(() => expect(scrolled).toHaveLength(1));
+      expect(scrolled[0].element).toBe(screen.getByRole('region', { name: 'Item details' }));
+      expect(scrolled[0].options).toEqual({ behavior: 'smooth', block: 'start' });
+
+      await userEvent.click(details.getByRole('button', { name: 'Back to list' }));
+      expect(scrolled).toHaveLength(2);
+      expect(scrolled[1].element).toBe(await row('Item b'));
+    });
+
+    it('jumps without animation when reduced motion is preferred', async () => {
+      stubMedia([STACKED, REDUCED]);
+      const scrolled = spyScroll();
+      listed = [item('a')];
+      mockApi();
+      await openInbox();
+      await select('Item a');
+      await waitFor(() => expect(scrolled).toHaveLength(1));
+      expect(scrolled[0].options).toEqual({ behavior: 'auto', block: 'start' });
+    });
+
+    it('does not scroll side by side', async () => {
+      stubMedia([]);
+      const scrolled = spyScroll();
+      listed = [item('a')];
+      mockApi();
+      await openInbox();
+      await select('Item a');
+      await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+      expect(scrolled).toHaveLength(0);
+    });
+  });
+
   describe('actions', () => {
     it('acknowledges optimistically, then applies the server reply', async () => {
       listed = [item('a')];
@@ -489,6 +564,32 @@ describe('Inbox page', () => {
       ]);
     });
 
+    it('rolls back only what a failed action changed', async () => {
+      listed = [item('a')];
+      const priorityReply = deferred<Reply>();
+      const acknowledgeReply = deferred<Reply>();
+      route = (url, init) =>
+        init?.method === 'PATCH'
+          ? priorityReply.promise
+          : init?.method === 'POST' && url === '/api/inbox/a/acknowledge'
+            ? acknowledgeReply.promise
+            : undefined;
+      mockApi();
+      await openInbox();
+      const details = await select('Item a');
+      await userEvent.selectOptions(details.getByRole('combobox', { name: 'Priority' }), 'P1');
+      await userEvent.click(details.getByRole('button', { name: 'Acknowledge' }));
+      expect(within(await row('Item a')).getByText('Acknowledged')).toBeInTheDocument();
+
+      act(() => priorityReply.resolve({ status: 500, body: { message: 'Boom.' } }));
+      expect(await screen.findByRole('alert')).toHaveTextContent('Could not change the priority');
+      expect(within(await row('Item a')).getByText('P2')).toBeInTheDocument();
+      expect(within(await row('Item a')).getByText('Acknowledged')).toBeInTheDocument();
+
+      act(() => acknowledgeReply.resolve({ status: 200, body: item('a', { status: 'acknowledged', revision: 2 }) }));
+      expect(within(await row('Item a')).getByText('Acknowledged')).toBeInTheDocument();
+    });
+
     it('rolls back a refused priority change', async () => {
       listed = [item('a')];
       route = (_url, init) =>
@@ -579,7 +680,7 @@ describe('Inbox page', () => {
       const first = await openInbox();
       await row('Item a');
       const listCalls = () => calls(fetchMock).filter(({ url }) => url.startsWith('/api/inbox?')).length;
-      expect(listCalls()).toBe(1);
+      expect(listCalls()).toBe(2);
 
       act(() => first.serverClose(1006));
       expect(await screen.findByText('Live updates disconnected. Reconnecting…')).toBeInTheDocument();
@@ -590,7 +691,7 @@ describe('Inbox page', () => {
       send(second, { type: 'inbox.hello', data: { serverTime: '' } });
       expect(await row('Missed while away')).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /Item a/ })).not.toBeInTheDocument();
-      expect(listCalls()).toBe(2);
+      expect(listCalls()).toBe(3);
       expect(screen.queryByText(/Reconnecting/)).not.toBeInTheDocument();
     });
 
@@ -640,6 +741,19 @@ describe('Inbox page', () => {
       await openInbox();
       expect(await screen.findByText('Last GitHub sync failed: Bad credentials.')).toBeInTheDocument();
       expect(screen.getByText('acme/api: Not found.')).toBeInTheDocument();
+    });
+
+    it.each([
+      ['after a sync', 'acme/api: Not found.'],
+      ['after a restart', 'Not found.'],
+    ])('shows a single repository failure once, %s', async (_when, globalError) => {
+      summary = summaryOf({
+        github: { ...github, lastError: globalError, repositories: [{ ...github.repositories[0], lastError: 'Not found.' }] },
+      });
+      mockApi();
+      await openInbox();
+      await screen.findByText(`Last GitHub sync failed: ${globalError}`);
+      expect(screen.getAllByText(/Not found\./)).toHaveLength(1);
     });
 
     it('updates sync health from sync messages', async () => {

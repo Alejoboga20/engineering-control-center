@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   INBOX_PRIORITIES,
   INBOX_STATUSES,
@@ -24,6 +24,21 @@ const EMPTY_TEXT: Record<InboxFilter, string> = {
   resolved: 'Nothing resolved in this view.',
 };
 
+/** Below Tailwind's `md` breakpoint the details sit under the whole list. */
+const STACKED_QUERY = '(max-width: 767.98px)';
+const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+
+function matchesMedia(query: string): boolean {
+  return typeof window.matchMedia === 'function' && window.matchMedia(query).matches;
+}
+
+/** Brings a section into view when the layout is stacked; side by side, both are visible already. */
+function revealWhenStacked(element: HTMLElement | null) {
+  const canScroll = element !== null && typeof element.scrollIntoView === 'function';
+  if (!canScroll || !matchesMedia(STACKED_QUERY)) return;
+  element.scrollIntoView({ behavior: matchesMedia(REDUCED_MOTION_QUERY) ? 'auto' : 'smooth', block: 'start' });
+}
+
 interface InboxPageProps {
   inbox: InboxControl;
   /** Names of the tmux sessions that exist now. */
@@ -33,6 +48,19 @@ interface InboxPageProps {
 
 export function InboxPage({ inbox, runningSessions, onOpenTerminal }: InboxPageProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [revealRequest, setRevealRequest] = useState(0);
+  const listRef = useRef<HTMLElement>(null);
+  const detailsRef = useRef<HTMLElement>(null);
+
+  // Runs after the details for the new selection have rendered.
+  useEffect(() => {
+    if (revealRequest > 0) revealWhenStacked(detailsRef.current);
+  }, [revealRequest]);
+
+  const selectItem = (id: string) => {
+    setSelectedId(id);
+    setRevealRequest((count) => count + 1);
+  };
   const { query, items } = inbox;
   const filter = query.filter ?? 'all';
   // Selecting by lookup means an item that leaves the current filter simply stops being selected.
@@ -118,6 +146,7 @@ export function InboxPage({ inbox, runningSessions, onOpenTerminal }: InboxPageP
       )}
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <section
+          ref={listRef}
           aria-label="Item list"
           className="shrink-0 border-b border-line p-2 md:w-96 md:overflow-y-auto md:border-r md:border-b-0"
         >
@@ -135,13 +164,28 @@ export function InboxPage({ inbox, runningSessions, onOpenTerminal }: InboxPageP
                   key={item.id}
                   item={item}
                   selected={item.id === selectedId}
-                  onSelect={() => setSelectedId(item.id)}
+                  onSelect={() => selectItem(item.id)}
                 />
               ))}
             </ul>
           )}
         </section>
-        <section aria-label="Item details" className="min-h-0 min-w-0 flex-1 md:overflow-y-auto">
+        <section
+          ref={detailsRef}
+          aria-label="Item details"
+          className="min-h-0 min-w-0 flex-1 scroll-mt-2 md:overflow-y-auto"
+        >
+          {selected && (
+            <button
+              type="button"
+              onClick={() =>
+                revealWhenStacked(listRef.current?.querySelector<HTMLElement>('[aria-current="true"]') ?? listRef.current)
+              }
+              className="mx-4 mt-3 text-xs text-accent hover:underline md:hidden"
+            >
+              Back to list
+            </button>
+          )}
           {selected ? (
             <InboxItemDetails
               key={selected.id}

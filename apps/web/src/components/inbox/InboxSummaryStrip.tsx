@@ -38,10 +38,15 @@ export function InboxSummaryStrip(props: InboxSummaryStripProps) {
   const { summary } = props;
   const github = summary?.github;
   const health = github ? syncHealth(github) : null;
-  // A single repository's error usually repeats the global one, which is already shown.
+  // The global error repeats the first failing repository's, as "<repository>: <error>" after a
+  // sync and bare after a restart, so that repository is not listed again.
   const failingRepositories =
-    github?.repositories.filter((repository) => repository.lastError && repository.lastError !== github.lastError) ??
-    [];
+    github?.repositories.filter(
+      ({ repository, lastError }) =>
+        lastError !== null &&
+        lastError !== github.lastError &&
+        `${repository}: ${lastError}` !== github.lastError,
+    ) ?? [];
   const isSyncDisabled = props.syncing || !github?.configured || github.running;
   const isReportingUnavailable = summary?.agentReportingAvailable === false;
 
