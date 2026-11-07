@@ -8,12 +8,9 @@
  * Only the fields named in buildPayload ever leave this process. Prompts, tool arguments, tool
  * output, transcript paths and environment contents are never read out of the input.
  */
-const { execFile } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
-const { readFileSync } = require('node:fs');
 const http = require('node:http');
-const os = require('node:os');
-const path = require('node:path');
+const { claimedSession, mappingContradicted, readCredentials } = require('./ecc-local.cjs');
 
 /** Must match CLAUDE_HOOK_EVENTS in packages/shared. A test keeps the two in step. */
 const EVENTS = new Set([
@@ -29,14 +26,11 @@ const EVENTS = new Set([
   'SessionEnd',
 ]);
 
-const SESSION_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const IDENTIFIER = /^[A-Za-z0-9_-]{1,128}$/;
 const TOOL_NAME = /^[A-Za-z0-9_.:-]{1,128}$/;
-const PANE = /^%\d{1,10}$/;
 
 const OVERALL_LIMIT_MS = 1500;
 const NETWORK_TIMEOUT_MS = 500;
-const TMUX_TIMEOUT_MS = 500;
 /** PostToolUse carries the tool's whole output, which can be large. Larger input is dropped. */
 const MAX_STDIN_BYTES = 32 * 1024 * 1024;
 
@@ -81,32 +75,6 @@ function buildPayload(input, tmuxSession, pane, timestamp) {
   };
 }
 
-/**
- * The variable is inherited, so it can outlive the truth: after `tmux rename-session`, or inside a
- * nested tmux. tmux itself says which session this pane belongs to, and a disagreement means the
- * mapping is unreliable, so nothing is reported. If tmux cannot answer, the variable stands.
- */
-function mappingContradicted(tmuxSession, pane) {
-  return new Promise((resolve) => {
-    execFile(
-      'tmux',
-      ['display-message', '-p', '-t', pane, '#{session_name}'],
-      { timeout: TMUX_TIMEOUT_MS, encoding: 'utf8' },
-      (error, stdout) => {
-        const actual = error ? '' : stdout.trim();
-        resolve(actual !== '' && actual !== tmuxSession);
-      },
-    );
-  });
-}
-
-function readCredentials() {
-  const dir =
-    process.env.ECC_STATE_DIR || path.join(os.homedir(), '.config', 'engineering-control-center');
-  const { url, host, token } = JSON.parse(readFileSync(path.join(dir, 'claude-hook.json'), 'utf8'));
-  return { url: new URL('/api/claude/hooks', url), host, token };
-}
-
 function send({ url, host, token }, payload) {
   return new Promise((resolve) => {
     const body = JSON.stringify(payload);
@@ -137,15 +105,16 @@ function send({ url, host, token }, payload) {
 
 async function main() {
   const timestamp = new Date().toISOString();
-  const tmuxSession = process.env.ECC_TMUX_SESSION;
-  const pane = process.env.TMUX_PANE;
   // No claim, or a claim made outside tmux: there is no reliable mapping to report.
-  if (!tmuxSession || !SESSION_NAME.test(tmuxSession) || !pane || !PANE.test(pane)) return;
+  const claim = claimedSession();
+  if (!claim) return;
+  const { tmuxSession, pane } = claim;
 
   const payload = buildPayload(JSON.parse(await readStdin()), tmuxSession, pane, timestamp);
   if (!payload) return;
   if (await mappingContradicted(tmuxSession, pane)) return;
-  await send(readCredentials(), payload);
+  const { url, host, token } = readCredentials();
+  await send({ url: new URL('/api/claude/hooks', url), host, token }, payload);
 }
 
 // A stalled stdin, tmux or backend must not hold Claude Code up.

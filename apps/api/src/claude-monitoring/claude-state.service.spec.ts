@@ -1,6 +1,11 @@
 import type { ClaudeHookEventRequest, ClaudeHookEventType, ClaudeSessionStatus } from '@ecc/shared';
 import type { TmuxService } from '../tmux/tmux.service';
-import { CLAUDE_LIMITS, CLAUDE_STALE_AFTER_MS, ClaudeStateService } from './claude-state.service';
+import {
+  AcceptedClaudeEvent,
+  CLAUDE_LIMITS,
+  CLAUDE_STALE_AFTER_MS,
+  ClaudeStateService,
+} from './claude-state.service';
 
 const T0 = Date.parse('2026-11-03T12:00:00.000Z');
 
@@ -397,6 +402,45 @@ describe('ClaudeStateService', () => {
       state.onChange(listener)();
       send('UserPromptSubmit');
       expect(listener).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('accepted events', () => {
+    it('hands each accepted event to listeners with the state before and after it', () => {
+      const seen: AcceptedClaudeEvent[] = [];
+      state.onEvent((event) => seen.push(event));
+      send('PermissionRequest', { toolName: 'Bash' });
+      send('PostToolUse', { toolName: 'Bash' });
+      expect(seen.map(({ request, previousState, state: after }) => [request.eventType, previousState, after])).toEqual([
+        ['PermissionRequest', 'unknown', 'needs_attention'],
+        ['PostToolUse', 'needs_attention', 'working'],
+      ]);
+    });
+
+    it('says nothing about duplicates, outdated or irrelevant events', () => {
+      const listener = jest.fn();
+      state.onEvent(listener);
+      send('Stop', { at: T0 + 5000, eventId: 'same' });
+      send('Stop', { at: T0 + 6000, eventId: 'same' });
+      send('UserPromptSubmit', { at: T0 + 1000 });
+      send('Notification', { at: T0 + 7000, notificationType: 'auth_success' });
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('names the instances that a new Claude in the same pane superseded', () => {
+      const seen: AcceptedClaudeEvent[] = [];
+      send('UserPromptSubmit');
+      state.onEvent((event) => seen.push(event));
+      send('SessionStart', { claudeSessionId: 'claude-2', source: 'startup' });
+      expect(seen[0].superseded).toEqual(['claude-1']);
+    });
+
+    it('keeps monitoring working when a listener throws', () => {
+      state.onEvent(() => {
+        throw new Error('boom');
+      });
+      expect(send('UserPromptSubmit')).toBe(true);
+      expect(status().state).toBe('working');
     });
   });
 

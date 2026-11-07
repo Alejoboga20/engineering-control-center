@@ -41,4 +41,47 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ECC_ALLOWED_ORIGINS: 'nope' })).toThrow(/origin/);
     expect(() => loadConfig({ ECC_TMUX_SOCKET: '../x' })).toThrow(/SOCKET/);
   });
+
+  describe('Engineering Inbox', () => {
+    it('keeps the database outside the repository by default, and GitHub off', () => {
+      const config = loadConfig({});
+      expect(config.dataDir).toBe(join(homedir(), '.local', 'share', 'engineering-control-center'));
+      expect(config.github).toEqual({
+        repositories: [],
+        authors: [],
+        tokenFile: null,
+        pollSeconds: 180,
+        initialSync: 'open',
+      });
+    });
+
+    it('reads the GitHub settings, lower-casing repositories and logins', () => {
+      const config = loadConfig({
+        ECC_DATA_DIR: '/var/lib/ecc',
+        ECC_GITHUB_REPOS: 'Acme/API, acme/web,acme/api',
+        ECC_GITHUB_AUTHORS: 'Alejo,dependabot[bot]',
+        ECC_GITHUB_TOKEN_FILE: '/home/dev/.config/ecc/github-token',
+        ECC_GITHUB_POLL_SECONDS: '300',
+        ECC_GITHUB_INITIAL_SYNC: 'new',
+      });
+      expect(config.dataDir).toBe('/var/lib/ecc');
+      expect(config.github).toEqual({
+        repositories: ['acme/api', 'acme/web'],
+        authors: ['alejo', 'dependabot[bot]'],
+        tokenFile: '/home/dev/.config/ecc/github-token',
+        pollSeconds: 300,
+        initialSync: 'new',
+      });
+    });
+
+    it('rejects invalid GitHub settings', () => {
+      expect(() => loadConfig({ ECC_GITHUB_REPOS: 'acme' })).toThrow(/owner\/name/);
+      expect(() => loadConfig({ ECC_GITHUB_REPOS: 'acme/api;drop' })).toThrow(/owner\/name/);
+      expect(() => loadConfig({ ECC_GITHUB_AUTHORS: 'a b' })).toThrow(/ECC_GITHUB_AUTHORS/);
+      expect(() => loadConfig({ ECC_GITHUB_POLL_SECONDS: '30' })).toThrow(/60 to 3600/);
+      expect(() => loadConfig({ ECC_GITHUB_POLL_SECONDS: '4000' })).toThrow(/60 to 3600/);
+      expect(() => loadConfig({ ECC_GITHUB_INITIAL_SYNC: 'all' })).toThrow(/INITIAL_SYNC/);
+      expect(() => loadConfig({ ECC_GITHUB_TOKEN_FILE: 'token.txt' })).toThrow(/absolute/);
+    });
+  });
 });

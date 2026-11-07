@@ -22,7 +22,9 @@ Environment=LANG=C.UTF-8
 # Shells in sessions created while no tmux server is running inherit this PATH as a starting point.
 Environment=PATH=/home/dev/.nvm/versions/node/v22.0.0/bin:/home/dev/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=HOME=/home/dev
-# Optional overrides, such as ECC_PROJECT_ROOTS. The leading "-" permits the file to be absent.
+# Optional overrides, such as ECC_PROJECT_ROOTS, ECC_DATA_DIR and the ECC_GITHUB_* settings. The
+# Inbox database defaults to $HOME/.local/share/engineering-control-center, which needs HOME above.
+# The leading "-" permits the file to be absent.
 EnvironmentFile=-/etc/engineering-control-center.env
 
 Restart=on-failure

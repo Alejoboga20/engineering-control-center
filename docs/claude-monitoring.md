@@ -201,6 +201,13 @@ report every event instead of adding throttling state that could lose a transiti
 500 ms, the tmux lookup 500 ms, and the whole reporter 1.5 seconds. With the backend stopped, connections fail
 immediately.
 
+## Engineering Inbox
+
+Accepted events also feed the [Engineering Inbox](engineering-inbox.md), through a listener on
+`ClaudeStateService` that receives each event after validation, deduplication and ordering. Permission requests,
+input requests and StopFailure become persistent items that survive restarts. Monitoring states, endpoints and
+messages are unchanged, and a failure in the Inbox cannot affect them.
+
 ## Limitations
 
 These follow from what hooks expose:

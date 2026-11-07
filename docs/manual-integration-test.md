@@ -102,6 +102,35 @@ Results of the run made when this feature was built are in the table. It used th
 | 7 | Change a file, and choose **Refresh**. | The change appears. | Automated tests |
 | 8 | Use a narrow window. | The list stacks above the details, with no sideways page scroll. | No |
 
+## Engineering Inbox
+
+Use a scratch data directory, so the real Inbox is not touched, and the private tmux server from Setup:
+
+```bash
+ECC_DATA_DIR=/tmp/ecc-manual/data ECC_STATE_DIR=/tmp/ecc-manual/state \
+ECC_TMUX_SOCKET=ecc-manual ECC_PROJECT_ROOTS=/tmp/ecc-manual pnpm start
+```
+
+For GitHub, add `ECC_GITHUB_REPOS=<a repository you own>` and `ECC_GITHUB_TOKEN_FILE=<a 0600 file>` with a
+read-only fine-grained token. The steps below change nothing on GitHub.
+
+| # | Do | Expect |
+| --- | --- | --- |
+| 1 | Open **Inbox** with nothing configured. | An empty state, and "GitHub not configured" with the reason. |
+| 2 | In `manual`, start `claude` and ask for something that needs permission. | A P1 permission item for `manual` appears within a second, naming the tool, with no arguments. The tab badge counts it. |
+| 3 | Approve the prompt. | The item resolves as cleared. |
+| 4 | Trigger another prompt, and deny it. | The item stays pending, and the UI says a denial sends no signal. Sending a new prompt clears it. |
+| 5 | Trigger a prompt, then restart the backend. | The item survives as uncertain, still open. |
+| 6 | Acknowledge, set P3, restart the backend. | Status and priority are kept. |
+| 7 | Run `pnpm inbox-mcp`. | It prints the add and remove commands, and changes nothing. Run the add command with `--env ECC_STATE_DIR=/tmp/ecc-manual/state`. |
+| 8 | Ask Claude in `manual` to report a blocker with the `report_blocker` tool, twice with the same idempotency key. | One item, attributed to `manual`. |
+| 9 | With GitHub configured, choose **Sync now**. | Open pull requests appear as P2 (drafts P3), with last sync time. |
+| 10 | Merge or close one of those pull requests on GitHub yourself, then **Sync now**. | Its item resolves, and its history shows why. |
+| 11 | Point `ECC_GITHUB_TOKEN_FILE` at a file with mode 644. | "GitHub not configured", asking for `chmod 600`. |
+| 12 | Run `pnpm inbox backup /tmp/ecc-manual/backup.sqlite3` with the same `ECC_DATA_DIR`. | A `0600` copy, while the backend keeps running. |
+
+Remove the MCP server afterwards with `claude mcp remove --scope user ecc-inbox`.
+
 ## Cleanup
 
 ```bash

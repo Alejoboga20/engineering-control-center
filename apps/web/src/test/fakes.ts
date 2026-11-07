@@ -3,9 +3,13 @@ import { vi } from 'vitest';
 /** Records what the application sends, and lets a test drive the server side of the socket. */
 export class FakeWebSocket {
   static readonly OPEN = 1;
-  /** Terminal sockets. The Claude monitor socket, open throughout, is kept apart in `monitors`. */
+  /**
+   * Terminal sockets. The Claude monitor and Inbox sockets, open throughout, are kept apart in
+   * `monitors` and `inboxes`.
+   */
   static instances: FakeWebSocket[] = [];
   static monitors: FakeWebSocket[] = [];
+  static inboxes: FakeWebSocket[] = [];
   static get last(): FakeWebSocket {
     return FakeWebSocket.instances[FakeWebSocket.instances.length - 1];
   }
@@ -18,7 +22,12 @@ export class FakeWebSocket {
   onclose: ((event: { code: number }) => void) | null = null;
 
   constructor(readonly url: string) {
-    (url.includes('/api/claude/events') ? FakeWebSocket.monitors : FakeWebSocket.instances).push(this);
+    const list = url.includes('/api/claude/events')
+      ? FakeWebSocket.monitors
+      : url.includes('/api/inbox/stream')
+        ? FakeWebSocket.inboxes
+        : FakeWebSocket.instances;
+    list.push(this);
   }
 
   send(data: string) {
@@ -161,6 +170,7 @@ export class FakeTerminal {
 export function installBrowserFakes() {
   FakeWebSocket.instances = [];
   FakeWebSocket.monitors = [];
+  FakeWebSocket.inboxes = [];
   terminals.length = 0;
   vi.stubGlobal('WebSocket', FakeWebSocket);
   vi.stubGlobal(

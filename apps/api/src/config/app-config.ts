@@ -25,6 +25,22 @@ export interface AppConfig {
   };
   /** Directories that a symlink in a configuration location may point into. */
   claudeSymlinkTargets: string[];
+  /** Private directory for the Engineering Inbox database. Outside the repository and builds. */
+  dataDir: string;
+  github: GitHubConfig;
+}
+
+export type GitHubInitialSync = 'open' | 'new';
+
+export interface GitHubConfig {
+  /** `owner/name`, lower case. Nothing else is ever queried. Empty disables GitHub sync. */
+  repositories: string[];
+  /** Lower-case logins. Empty means every author in the allowed repositories. */
+  authors: string[];
+  /** A file that holds only the token. Read at each sync, never logged or stored. */
+  tokenFile: string | null;
+  pollSeconds: number;
+  initialSync: GitHubInitialSync;
 }
 
 export const APP_CONFIG = Symbol('APP_CONFIG');
@@ -32,6 +48,9 @@ export const APP_CONFIG = Symbol('APP_CONFIG');
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost']);
 const WILDCARD_HOSTS = new Set(['0.0.0.0', '::', '[::]', '*']);
 const TMUX_SOCKET_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+const REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/;
+const GITHUB_LOGIN_PATTERN = /^[A-Za-z0-9-]{1,39}(\[bot\])?$/;
+export const GITHUB_POLL_SECONDS = { default: 180, min: 60, max: 3600 } as const;
 
 type Env = Record<string, string | undefined>;
 
@@ -73,6 +92,47 @@ function loadSymlinkTargets(value: string | undefined): string[] {
       }
       return resolve(target);
     });
+}
+
+function loadGitHubConfig(env: Env): GitHubConfig {
+  const repositories = [...new Set(splitList(env.ECC_GITHUB_REPOS).map((repo) => repo.toLowerCase()))];
+  for (const repo of repositories) {
+    if (!REPOSITORY_PATTERN.test(repo)) {
+      throw new Error(`ECC_GITHUB_REPOS entries must look like owner/name, got "${repo}"`);
+    }
+  }
+  const authors = splitList(env.ECC_GITHUB_AUTHORS).map((author) => author.toLowerCase());
+  for (const author of authors) {
+    if (!GITHUB_LOGIN_PATTERN.test(author)) {
+      throw new Error(`Invalid login in ECC_GITHUB_AUTHORS: "${author}"`);
+    }
+  }
+  const rawPoll = env.ECC_GITHUB_POLL_SECONDS?.trim();
+  const pollSeconds = rawPoll ? Number(rawPoll) : GITHUB_POLL_SECONDS.default;
+  if (
+    !Number.isInteger(pollSeconds) ||
+    pollSeconds < GITHUB_POLL_SECONDS.min ||
+    pollSeconds > GITHUB_POLL_SECONDS.max
+  ) {
+    throw new Error(
+      `ECC_GITHUB_POLL_SECONDS must be an integer from ${GITHUB_POLL_SECONDS.min} to ${GITHUB_POLL_SECONDS.max}, got "${rawPoll}"`,
+    );
+  }
+  const initialSync = env.ECC_GITHUB_INITIAL_SYNC?.trim() || 'open';
+  if (initialSync !== 'open' && initialSync !== 'new') {
+    throw new Error(`ECC_GITHUB_INITIAL_SYNC must be "open" or "new", got "${initialSync}"`);
+  }
+  const tokenFile = env.ECC_GITHUB_TOKEN_FILE?.trim();
+  if (tokenFile && !isAbsolute(expandHome(tokenFile))) {
+    throw new Error(`ECC_GITHUB_TOKEN_FILE must be an absolute path, got "${tokenFile}"`);
+  }
+  return {
+    repositories,
+    authors,
+    tokenFile: tokenFile ? resolve(expandHome(tokenFile)) : null,
+    pollSeconds,
+    initialSync,
+  };
 }
 
 export function loadConfig(env: Env = process.env): AppConfig {
@@ -142,5 +202,9 @@ export function loadConfig(env: Env = process.env): AppConfig {
       : join(homedir(), '.claude'),
     claudeKnowledgeDirs: loadKnowledgeDirs(env.ECC_CLAUDE_KNOWLEDGE_DIRS),
     claudeSymlinkTargets: loadSymlinkTargets(env.ECC_CLAUDE_SYMLINK_TARGETS),
+    dataDir: env.ECC_DATA_DIR?.trim()
+      ? resolve(expandHome(env.ECC_DATA_DIR.trim()))
+      : join(homedir(), '.local', 'share', 'engineering-control-center'),
+    github: loadGitHubConfig(env),
   };
 }
