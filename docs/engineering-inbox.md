@@ -70,7 +70,7 @@ binaries for Linux and macOS. Node's built-in `node:sqlite` is still experimenta
 | `priority`, `suggested_priority`, `priority_overridden` | Effective priority, what the rules suggest, and whether a person overrode it |
 | `status` | `open`, `acknowledged`, `resolved` |
 | `source` | `github`, `claude` (`manual` is reserved) |
-| `source_state` | `open`, `merged`, `closed` for PRs; `pending`, `cleared`, `uncertain` for Claude items |
+| `source_state` | `open`, `merged`, `closed` for PRs; `pending`, `cleared`, `uncertain` for hook-raised Claude items; always `pending` for agent-reported blockers |
 | `source_session`, `source_agent` | tmux session and Claude session ID, when known |
 | `pr_repository`, `pr_number`, `pr_url`, `pr_author`, `pr_draft`, `pr_review_state`, `pr_checks_state`, `pr_attribution` | Pull request metadata. `UNIQUE (pr_repository, pr_number)`. |
 | `revision` | Increases on every change |
@@ -177,7 +177,8 @@ Without a reliable signal, the item becomes **`uncertain`**, and is never resolv
 Items survive their session. **Denying a permission sends no hook** (verified in V2), so after a denial the item
 stays `pending` until the next prompt clears it; the UI says so.
 
-Agent reports are not cleared by hooks and never become uncertain: an explicit blocker stays until a person
+Agent-reported blockers also have `source_state` `pending`, but they are not cleared by hooks and never become
+uncertain: an explicit blocker stays until a person
 resolves it.
 
 ### Listing
@@ -371,7 +372,8 @@ The database is one file. While the dashboard runs, copy it with SQLite's online
 pnpm inbox backup ~/backups/inbox-$(date +%F).sqlite3
 ```
 
-This uses better-sqlite3's backup API, so it works without the `sqlite3` command. With the CLI installed, this is
+This uses better-sqlite3's backup API, so it works without the `sqlite3` command. The copy is switched out of WAL
+mode, so it is one standalone file that opens read-only, for example with `sqlite3 -readonly`. With the CLI installed, this is
 equivalent:
 
 ```bash
