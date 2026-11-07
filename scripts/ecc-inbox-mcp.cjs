@@ -241,6 +241,7 @@ async function handle(message) {
   }
 }
 
+const inFlight = new Set();
 const lines = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
 lines.on('line', (line) => {
   if (!line.trim()) return;
@@ -255,8 +256,11 @@ lines.on('line', (line) => {
     fail(null, -32700, 'Parse error');
     return;
   }
-  handle(message).catch(() => {
+  const pending = handle(message).catch(() => {
     if (message && message.id !== undefined) fail(message.id, -32603, 'Internal error');
   });
+  inFlight.add(pending);
+  pending.finally(() => inFlight.delete(pending));
 });
-lines.on('close', () => process.exit(0));
+// Calls still in flight are answered before exiting.
+lines.on('close', () => Promise.allSettled([...inFlight]).then(() => process.exit(0)));

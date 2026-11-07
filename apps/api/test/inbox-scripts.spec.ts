@@ -194,6 +194,14 @@ describe('Inbox MCP server', () => {
     expect(response.result).toMatchObject({ isError: true, content: [{ text: expect.stringMatching(/credentials/) }] });
   });
 
+  it('answers a call in flight before exiting when stdin closes', async () => {
+    startMcp();
+    const exited = new Promise<number | null>((done) => child.on('close', done));
+    child.stdin.end(`${JSON.stringify({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'report_blocker', arguments: { title: 'Last words' } } })}\n`);
+    expect(await exited).toBe(0);
+    expect(JSON.parse(stdout)).toMatchObject({ id: 4, result: { content: [{ text: 'Reported to the Engineering Inbox.' }] } });
+  });
+
   it('answers JSON-RPC errors for malformed input and unknown methods, and keeps running', async () => {
     startMcp();
     child.stdin.write('not json\n');
