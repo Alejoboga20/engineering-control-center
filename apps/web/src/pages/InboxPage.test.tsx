@@ -680,6 +680,19 @@ describe('Inbox page', () => {
       expect(screen.getByText('acme/api: Not found.')).toBeInTheDocument();
     });
 
+    it.each([
+      ['after a sync', 'acme/api: Not found.'],
+      ['after a restart', 'Not found.'],
+    ])('shows a single repository failure once, %s', async (_when, globalError) => {
+      summary = summaryOf({
+        github: { ...github, lastError: globalError, repositories: [{ ...github.repositories[0], lastError: 'Not found.' }] },
+      });
+      mockApi();
+      await openInbox();
+      await screen.findByText(`Last GitHub sync failed: ${globalError}`);
+      expect(screen.getAllByText(/Not found\./)).toHaveLength(1);
+    });
+
     it('updates sync health from sync messages', async () => {
       mockApi();
       const socket = await openInbox();
