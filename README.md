@@ -4,7 +4,8 @@ A self-hosted web dashboard for persistent terminal sessions on an Ubuntu server
 to run several Claude Code instances remotely, driving them from a browser, while they keep running
 through closed browsers, dropped SSH connections, and dashboard restarts.
 
-It is a thin layer over tmux. There is no database and no stored application state.
+It is a thin layer over tmux. The only stored application state is the [Engineering Inbox](#engineering-inbox),
+a small SQLite database of work that needs your attention.
 
 > **Security:** this application has **no login** and gives a shell to anyone who reaches it. Keep it on
 > a trusted private channel, as described under [Security](#security).
@@ -29,6 +30,8 @@ It is a thin layer over tmux. There is no database and no stored application sta
 | System metrics | Linux (`/proc/meminfo`, `os.cpus()`, `statfs`) |
 | Available project directories | The filesystem, under the configured roots |
 | Claude Code history and configuration | Claude Code |
+| Inbox items and triage decisions | SQLite, in `ECC_DATA_DIR` |
+| Pull request state | GitHub |
 
 | Path | Contents |
 | --- | --- |
@@ -36,6 +39,7 @@ It is a thin layer over tmux. There is no database and no stored application sta
 | `apps/api/src/sessions/` | REST endpoints and working directory validation |
 | `apps/api/src/terminal/` | WebSocket gateway, and the PTY-to-socket bridge |
 | `apps/api/src/system/` | Host statistics |
+| `apps/api/src/inbox/` | Engineering Inbox: SQLite storage, rules, REST, stream, GitHub sync, Claude and agent reports |
 | `apps/api/src/common/` | Error format, Host and Origin checks, security headers |
 | `apps/web/src/` | React dashboard |
 | `packages/shared/` | API types, WebSocket protocol, session name rules |
@@ -104,6 +108,12 @@ All settings are environment variables. In production, put them in `/etc/enginee
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude Code's user directory, read by the Configuration tab |
 | `ECC_CLAUDE_KNOWLEDGE_DIRS` | unset | Comma-separated Markdown directories for the Configuration tab. Absolute: global. Relative: inside each project. |
 | `ECC_CLAUDE_SYMLINK_TARGETS` | unset | Comma-separated absolute directories that symlinks in Claude Code configuration may point into. Others are not followed. |
+| `ECC_DATA_DIR` | `~/.local/share/engineering-control-center` | Private directory for the Inbox database. Keep it outside the checkout. |
+| `ECC_GITHUB_REPOS` | unset | Comma-separated `owner/name` repositories whose pull requests the Inbox tracks. Unset disables GitHub. |
+| `ECC_GITHUB_TOKEN_FILE` | unset | Absolute path of a `0600` file holding only a read-only GitHub token |
+| `ECC_GITHUB_AUTHORS` | unset | Comma-separated logins whose pull requests become items. Unset: all authors. |
+| `ECC_GITHUB_POLL_SECONDS` | `180` | GitHub polling interval, 60 to 3600 |
+| `ECC_GITHUB_INITIAL_SYNC` | `open` | `open` imports existing open pull requests on the first sync; `new` only those opened afterwards |
 
 ## Deploying on Ubuntu
 
@@ -126,6 +136,28 @@ sudo tee /etc/engineering-control-center.env >/dev/null <<'CONF'
 ECC_PROJECT_ROOTS=/home/dev/projects
 CONF
 ```
+
+For the Inbox's GitHub sync (optional), store a read-only token in a private file and add its settings. The
+database is created on first start in `~/.local/share/engineering-control-center` (mode `0700`), which survives
+rebuilds and redeploys; set `ECC_DATA_DIR` to put it elsewhere, outside the checkout.
+
+```bash
+install -d -m 700 ~/.config/engineering-control-center
+install -m 600 /dev/null ~/.config/engineering-control-center/github-token
+$EDITOR ~/.config/engineering-control-center/github-token     # paste the token only
+sudo tee -a /etc/engineering-control-center.env >/dev/null <<'CONF'
+ECC_GITHUB_REPOS=acme/api,acme/web
+ECC_GITHUB_TOKEN_FILE=/home/dev/.config/engineering-control-center/github-token
+# ECC_GITHUB_AUTHORS=dev
+# ECC_GITHUB_POLL_SECONDS=180
+# ECC_GITHUB_INITIAL_SYNC=open
+# ECC_DATA_DIR=/home/dev/.local/share/engineering-control-center
+CONF
+sudo systemctl restart engineering-control-center
+```
+
+The token permissions are in [docs/engineering-inbox.md](docs/engineering-inbox.md#github). Back up the database
+with `pnpm inbox backup <file>`, as described in [Backup and restore](docs/engineering-inbox.md#backup-and-restore).
 
 **3. Install the service.** systemd does not load shell profiles or nvm, so the unit needs the absolute
 path of your Node version. This fills in the placeholders:
@@ -233,6 +265,20 @@ notification, click the bell beside **New session** and allow notifications. Thi
 works through SSH forwarding and `tailscale serve`, and only while the dashboard stays open in a tab. See
 [Attention notifications](docs/claude-monitoring.md#attention-notifications).
 
+## Engineering Inbox
+
+The **Inbox** tab is a persistent, prioritized queue of what needs you: pull requests in the repositories you list,
+permission prompts and input requests from Claude Code, agents that stopped on an error, and blockers that agents
+report themselves. Items survive restarts and reboots; acknowledging, resolving, reopening and manual priorities
+are kept, and a sync never overwrites them. It never merges, approves or answers anything.
+
+- Claude Code items come from the monitoring hooks, with nothing more to install.
+- Pull requests come from GitHub, read-only, once `ECC_GITHUB_REPOS` and `ECC_GITHUB_TOKEN_FILE` are set.
+- For agents to report blockers and pull requests, add the local MCP server. `pnpm inbox-mcp` prints the
+  `claude mcp add` and `claude mcp remove` commands; it changes nothing itself.
+
+See [docs/engineering-inbox.md](docs/engineering-inbox.md) for the rules, the schema, setup, security and backups.
+
 ## Browsing Claude Code configuration
 
 The **Configuration** tab shows agents, Skills, instructions and rules, hook registrations, and settings, for the
@@ -279,8 +325,10 @@ fake PTY. `test/real-tmux.integration.spec.ts` drives real tmux and real `node-p
 and is skipped if tmux is not installed. Frontend tests use Vitest and Testing Library.
 
 The end-to-end browser procedure is in [docs/manual-integration-test.md](docs/manual-integration-test.md),
-the terminal protocol in [docs/websocket-protocol.md](docs/websocket-protocol.md), and Claude Code monitoring
-in [docs/claude-monitoring.md](docs/claude-monitoring.md).
+the terminal protocol in [docs/websocket-protocol.md](docs/websocket-protocol.md), Claude Code monitoring
+in [docs/claude-monitoring.md](docs/claude-monitoring.md), and the Engineering Inbox in
+[docs/engineering-inbox.md](docs/engineering-inbox.md). Inbox tests use a temporary database per test and a fake
+GitHub; they never call the real API.
 
 ## Troubleshooting
 
@@ -301,6 +349,7 @@ in [docs/claude-monitoring.md](docs/claude-monitoring.md).
 | Attaching exits at once with an `unknown option -- T` error | tmux is older than 3.2. Upgrade it. |
 | Sessions from SSH die on logout | `KillUserProcesses=yes` is set in logind. Run `loginctl enable-linger $USER`, or change the setting. |
 | `posix_spawnp failed` on macOS | Rerun `pnpm install`, which restores the execute bit on node-pty's helper. |
+| Inbox unavailable, or GitHub not syncing | See [Inbox troubleshooting](docs/engineering-inbox.md#troubleshooting). |
 
 ## Known limitations
 
