@@ -178,7 +178,11 @@ export interface AgentReportRequest {
 }
 
 export interface AgentReportResponse {
-  itemId: string;
+  /**
+   * Null only for a pull_request report that GitHub has not confirmed yet. The report is kept, and
+   * the sync that first sees the pull request links it.
+   */
+  itemId: string | null;
   /** False when an existing item was updated or the report was a retry. */
   created: boolean;
 }

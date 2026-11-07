@@ -10,6 +10,7 @@ import {
 import { HttpAdapterHost } from '@nestjs/core';
 import {
   CLAUDE_EVENTS_PATH,
+  INBOX_STREAM_PATH,
   isValidSessionName,
   SESSION_NAME_RULES,
   ServerMessage,
@@ -77,8 +78,8 @@ export class TerminalGateway implements OnApplicationBootstrap, BeforeApplicatio
     socket.on('error', () => socket.destroy());
 
     const url = new URL(req.url ?? '/', 'http://localhost');
-    // Handled by ClaudeMonitoringGateway, on its own listener for this event.
-    if (url.pathname === CLAUDE_EVENTS_PATH) return;
+    // Handled by ClaudeMonitoringGateway and InboxGateway, on their own listeners for this event.
+    if (url.pathname === CLAUDE_EVENTS_PATH || url.pathname === INBOX_STREAM_PATH) return;
 
     const match = TERMINAL_PATH.exec(url.pathname);
     if (!match) {

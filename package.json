@@ -29,7 +29,8 @@
     "onlyBuiltDependencies": [
       "node-pty",
       "esbuild",
-      "@nestjs/core"
+      "@nestjs/core",
+      "better-sqlite3"
     ]
   }
 }

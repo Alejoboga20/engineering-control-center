@@ -26,6 +26,9 @@ export function testConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     claudeConfigDir: mkdtempSync(join(tmpdir(), 'ecc-claude-')),
     claudeKnowledgeDirs: { global: [], project: [] },
     claudeSymlinkTargets: [],
+    // A fresh database per test, never the real Inbox.
+    dataDir: mkdtempSync(join(tmpdir(), 'ecc-data-')),
+    github: { repositories: [], authors: [], tokenFile: null, pollSeconds: 180, initialSync: 'open' },
     ...overrides,
   };
 }

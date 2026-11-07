@@ -15,6 +15,6 @@ import { ClaudeStateService } from './claude-state.service';
     ClaudeHookAuthGuard,
     ClaudeMonitoringGateway,
   ],
-  exports: [ClaudeStateService],
+  exports: [ClaudeStateService, ClaudeHookCredentialsService, ClaudeHookAuthGuard],
 })
 export class ClaudeMonitoringModule {}

@@ -27,6 +27,19 @@ const ACTIVITY_PUBLISH_INTERVAL_MS = 5_000;
 
 type Listener = (status: ClaudeSessionStatus) => void;
 
+/** An event that changed monitoring state, after validation, deduplication and ordering. */
+export interface AcceptedClaudeEvent {
+  request: ClaudeHookEventRequest;
+  ts: number;
+  /** The instance's state before and after this event. */
+  previousState: ClaudeState;
+  state: ClaudeState;
+  /** Other Claude instances in the same pane that this event showed to be gone. */
+  superseded: string[];
+}
+
+type EventListener = (event: AcceptedClaudeEvent) => void;
+
 /**
  * Latest observed Claude activity per tmux session, in memory only. Losing it on restart is
  * acceptable: every session falls back to Unknown until its next event.
@@ -39,6 +52,7 @@ export class ClaudeStateService implements OnApplicationBootstrap, OnApplication
   private readonly seenEventIds = new Set<string>();
   private readonly published = new Map<string, { key: string; material: string; at: number }>();
   private readonly listeners = new Set<Listener>();
+  private readonly eventListeners = new Set<EventListener>();
   private sweepTimer: NodeJS.Timeout | null = null;
 
   constructor(private readonly tmux: TmuxService) {}
@@ -55,6 +69,15 @@ export class ClaudeStateService implements OnApplicationBootstrap, OnApplication
   onChange(listener: Listener): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  /**
+   * Hears every accepted event, after the status has been published. A failing listener is
+   * logged and cannot affect monitoring.
+   */
+  onEvent(listener: EventListener): () => void {
+    this.eventListeners.add(listener);
+    return () => this.eventListeners.delete(listener);
   }
 
   /** Returns false when the event was ignored as a duplicate, as outdated, or as irrelevant. */
@@ -77,10 +100,12 @@ export class ClaudeStateService implements OnApplicationBootstrap, OnApplication
       lastEventTs: ts,
       lastActivityTs: ts,
     };
+    const previousState = instance.state;
     applyEvent(instance, event);
 
+    let superseded: string[] = [];
     if (event.eventType === 'SessionStart' && event.source !== 'compact') {
-      this.supersedeOthersInPane(instances, instance);
+      superseded = this.supersedeOthersInPane(instances, instance);
     }
     instances.delete(instance.id);
     instances.set(instance.id, instance);
@@ -91,6 +116,7 @@ export class ClaudeStateService implements OnApplicationBootstrap, OnApplication
     this.evictSessions();
 
     this.publish(request.tmuxSession);
+    this.notifyEvent({ request, ts, previousState, state: instance.state, superseded });
     return true;
   }
 
@@ -187,11 +213,27 @@ export class ClaudeStateService implements OnApplicationBootstrap, OnApplication
    * is gone, even if it crashed without SessionEnd. If it was only suspended behind a nested
    * Claude, its next event brings it back, and the status then reports multiple instances.
    */
-  private supersedeOthersInPane(instances: Map<string, ClaudeInstance>, current: ClaudeInstance) {
-    if (!current.pane) return;
+  private supersedeOthersInPane(
+    instances: Map<string, ClaudeInstance>,
+    current: ClaudeInstance,
+  ): string[] {
+    if (!current.pane) return [];
+    const superseded: string[] = [];
     for (const other of instances.values()) {
       if (other !== current && other.pane === current.pane && other.lastEventTs <= current.lastEventTs) {
+        if (other.state !== 'offline') superseded.push(other.id);
         other.state = 'offline';
+      }
+    }
+    return superseded;
+  }
+
+  private notifyEvent(event: AcceptedClaudeEvent): void {
+    for (const listener of this.eventListeners) {
+      try {
+        listener(event);
+      } catch (error) {
+        this.logger.warn(`A Claude event listener failed: ${(error as Error).message}`);
       }
     }
   }

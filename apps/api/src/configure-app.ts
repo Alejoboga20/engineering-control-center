@@ -13,7 +13,7 @@ export function configureApp(app: NestExpressApplication, config: AppConfig): vo
   app.use(requestGuard(config));
   app.use(securityHeaders);
   app.useBodyParser('json', { limit: '16kb' });
-  app.enableCors({ origin: config.allowedOrigins, methods: ['GET', 'POST', 'DELETE'] });
+  app.enableCors({ origin: config.allowedOrigins, methods: ['GET', 'POST', 'PATCH', 'DELETE'] });
   app.setGlobalPrefix('api');
   app.useGlobalFilters(new ApiExceptionFilter());
   app.useGlobalPipes(
