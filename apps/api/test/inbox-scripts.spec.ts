@@ -1,5 +1,5 @@
 import { ChildProcessWithoutNullStreams, spawn, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, IncomingMessage, Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -245,6 +245,7 @@ describe('inbox maintenance script', () => {
   it('backs up the database to a new owner-only file', () => {
     mkdirSync(join(dir, 'data'));
     const db = new Database(join(dir, 'data', 'inbox.sqlite3'));
+    db.pragma('journal_mode = WAL');
     migrate(db);
     db.prepare(`INSERT INTO github_sync_state (repository) VALUES ('acme/api')`).run();
     db.close();
@@ -253,7 +254,12 @@ describe('inbox maintenance script', () => {
     const result = run(['backup', destination]);
     expect(result.status).toBe(0);
     expect(statSync(destination).mode & 0o777).toBe(0o600);
+    // A standalone file: no WAL flag, so it opens read-only with no -shm beside it.
+    expect(existsSync(`${destination}-wal`) || existsSync(`${destination}-shm`)).toBe(false);
+    const header = readFileSync(destination).subarray(18, 20);
+    expect([...header]).toEqual([1, 1]);
     const copy = new Database(destination, { readonly: true });
+    expect(copy.pragma('journal_mode', { simple: true })).toBe('delete');
     expect(copy.prepare('SELECT repository FROM github_sync_state').all()).toEqual([{ repository: 'acme/api' }]);
     copy.close();
 
